@@ -1,8 +1,8 @@
 # 多平台聊天记录聚合 App 产品需求文档
 
 - 产品代号：待定
-- 文档状态：构想 / V0.1
-- 目标平台：iOS 优先，架构预留 Android 与桌面端数据源适配
+- 文档状态：已确定 iOS 先行 + KMP 共享核心策略 / V0.2
+- 目标平台：iOS 优先发布；Android 为确定的后续目标，核心架构从第一天起保证可迁移
 - 更新日期：2026-10-27
 
 ## 1. 产品定位
@@ -82,6 +82,8 @@
 - 图片 OCR、语音转文字、智能摘要。
 - 自动识别同一个人。
 - Android 端正式发布。
+
+说明：Android 不进入 MVP 交付范围，但不是“以后再考虑”的模糊目标。MVP 必须采用跨平台核心架构，避免联系人绑定、导入、去重、搜索、标签等核心规则被锁死在 iOS 代码中。
 
 ## 5. 用户流程
 
@@ -297,16 +299,71 @@ MVP：
 
 ## 9. 技术方案建议
 
-### 9.1 iOS 客户端
+### 9.1 总体架构决策
+
+采用 **Kotlin Multiplatform Shared Core + 原生 iOS UI**：
+
+```text
+iOS App / SwiftUI
+Android App / Jetpack Compose，后续
+        ↓
+KMP Shared Core
+    ├── Person / PlatformIdentity / Message / Tag / Fact
+    ├── Importer Adapter 接口与通用解析流程
+    ├── 平台身份绑定规则
+    ├── 时间线合并
+    ├── 去重
+    ├── 搜索语法解析
+    ├── 标签与 Fact 逻辑
+    └── 备份文件格式
+        ↓
+SQLite / FTS 索引
+```
+
+选择原因：
+
+1. 当前目标是先发布 iOS MVP，同时 Android 是确定需求。
+2. 本产品的长期价值主要在数据导入、统一检索、标签沉淀和备份，而不只在 UI。
+3. SwiftUI 适合做高质量 iOS 界面，但不适合直接复用到 Android。
+4. KMP 允许 iOS 先使用 SwiftUI，同时把领域逻辑、数据模型和搜索规则放入共享模块。
+5. 后续 Android 使用 Jetpack Compose 接入同一核心，只重写 UI 与平台适配，不重写全部产品逻辑。
+
+### 9.2 iOS 客户端
 
 - UI：SwiftUI
-- 本地数据库：SQLite，或 GRDB + FTS5
-- 全文索引：SQLite FTS5，中文可用内置分词加自定义分词补丁，或接入本地分词库
+- 通过 KMP 产物接入共享领域层
+- 本地数据库：优先由共享层统一使用 SQLDelight / SQLite，避免 iOS 独自形成第二套业务数据库逻辑
+- 全文索引：SQLite FTS5；中文可用内置分词加自定义分词补丁，或接入本地分词库
 - 搜索响应：输入防抖 80ms～120ms，立即返回缓存结果
 - 本地加密：SQLCipher 或 iOS Data Protection
 - 备份：文件加密导出，优先不自动上云
 
-### 9.2 解析层
+### 9.3 Android 迁移策略
+
+Android 正式启动时：
+
+- UI 使用 Jetpack Compose。
+- 直接接入 KMP Shared Core。
+- 不重新定义 Person、Message、Tag、Fact 等核心模型。
+- 不重写搜索语法、去重规则、时间线合并、标签状态机。
+- 使用 Android 平台适配实现文件选择、系统分享、OCR、生物识别和外部链接跳转。
+
+### 9.4 平台适配层
+
+共享层定义接口，iOS 与 Android 各自实现：
+
+| 能力 | iOS 适配 | Android 适配 |
+|---|---|---|
+| 文件导入 | `fileImporter` / Files App | Storage Access Framework |
+| 系统分享接收 | Share Extension | Share Intent |
+| OCR | Vision Framework | ML Kit |
+| 隐私锁 | Face ID / Touch ID | Biometric API |
+| 原帖跳转 | Universal Links / custom scheme | App Links / Intent |
+| 安全存储 | Keychain / Data Protection | Keystore / EncryptedSharedPreferences |
+
+注意：平台差异不只是聊天记录来源。导入路径、权限、分享入口、OCR、后台限制和外部 App 唤起都需要单独适配。
+
+### 9.5 解析层
 
 - 每个平台一个 Importer Adapter。
 - 导入流程统一为：
@@ -318,7 +375,14 @@ MVP：
   6. 去重入库
   7. 更新索引
 
-### 9.3 去重策略
+Importer 分为两层：
+
+1. **共享解析层**：解析文本、时间、发送者、链接、媒体引用和平台元数据。
+2. **平台接入层**：iOS / Android 各自负责拿到原始文件或分享数据。
+
+这样同一个微信记录解析器应尽量同时服务 iOS 与 Android；只有取文件的入口不同。
+
+### 9.6 去重策略
 
 - 以 `platform + chat_key + sender + timestamp + normalized_text + media_hash` 生成摘要。
 - 对同一秒多条消息加入序号或上下文指纹。
@@ -358,7 +422,10 @@ MVP：
 
 ### 阶段 0：技术验证，1～2 周
 
+- 建立 KMP Shared Core 工程骨架，并验证 iOS SwiftUI 可直接调用共享模块。
+- 定义 Person、PlatformIdentity、Message、Tag、Fact 的共享模型。
 - 验证 iOS 本地数据库、加密、FTS5 搜索性能。
+- 为导入解析、去重、时间线合并、搜索语法和标签规则编写共享单元测试。
 - 收集微信/QQ 可导出格式样本。
 - 明确小红书/抖音链接格式与跳转能力。
 - 输出数据格式规范。
@@ -384,6 +451,7 @@ MVP：
 
 ### 阶段 3：长期探索
 
+- Android Jetpack Compose 正式端。
 - 官方或合规同步能力
 - 语音转文字
 - 图片理解
