@@ -1,0 +1,26 @@
+.DS_Store
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+
+# Swift / iOS
+.build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Dependencies
+Packages/
+Pods/
+
+# Environment and local secrets
+.env
+.env.*
+*.pem
+*.p12
+*.mobileprovision
+
+# Logs
+*.log
