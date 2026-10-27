@@ -1,0 +1,48 @@
+# 聊天记忆库 SwiftUI 原型
+
+这个目录先交付一版高优先级 UI 原型：
+
+- iPhone：底部标签导航 + 单列时间线 + 详情 Sheet
+- iPad / Mac：三栏 `NavigationSplitView`
+- 统一视觉语言：渐变主视觉、玻璃卡片、平台颜色、圆角标签、流畅 spring 动画
+- 领域逻辑：联系人、消息、平台筛选、全文搜索、标签、日期分组、收藏
+
+## 目录
+
+```text
+Sources/ChatMemoryDomain       可测试的领域模型，未来迁移到 KMP
+Sources/ChatMemoryUI           SwiftUI 界面与设计系统
+Sources/ChatMemoryPrototypeApp macOS 可执行原型入口
+Sources/DomainSmokeTests       无 XCTest 依赖的逻辑冒烟测试
+Tests/ChatMemoryUITests        Xcode 环境下的单元测试
+```
+
+## 运行
+
+```bash
+cd Prototype
+swift run DomainSmokeTests
+swift build --product ChatMemoryDomain
+```
+
+当前机器只安装了 Command Line Tools，未安装完整 Xcode，因此：
+
+- `swift build --product ChatMemoryDomain` 可以验证领域模块。
+- `swift run DomainSmokeTests` 可以验证核心逻辑。
+- SwiftUI UI 需要在安装完整 Xcode 后做类型检查和真机 / 模拟器预览。
+- `swift test` 依赖 XCTest，同样需要完整 Xcode 工具链。
+
+安装完整 Xcode 后，可以运行 macOS 原型：
+
+```bash
+swift run ChatMemoryPrototypeApp
+```
+
+如果要生成 iPhone / iPad / Mac 的正式 App 工程，先安装 [XcodeGen](https://github.com/yonaskolb/XcodeGen)，再执行：
+
+```bash
+cd Prototype
+xcodegen generate
+open ChatMemory.xcodeproj
+```
+
