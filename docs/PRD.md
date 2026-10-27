@@ -1,8 +1,8 @@
 # 多平台聊天记录聚合 App 产品需求文档
 
 - 产品代号：待定
-- 文档状态：已确定 iOS 先行 + KMP 共享核心策略 / V0.2
-- 目标平台：iOS 优先发布；Android 为确定的后续目标，核心架构从第一天起保证可迁移
+- 文档状态：已确定 Apple 三端 + KMP 共享核心策略 / V0.3
+- 目标平台：iPhone / iPad 优先发布，Mac 为确定后续目标；Android 为确定的长期目标，核心架构从第一天起保证可迁移
 - 更新日期：2026-10-27
 
 ## 1. 产品定位
@@ -49,28 +49,32 @@
 
 ### 4.1 必须做
 
-1. **本地身份与联系人绑定**
+1. **iPhone / iPad 通用 App**
+   - 同一个 iOS App 支持 iPhone 与 iPad。
+   - 使用 Adaptive Layout 适配 Compact 和 Regular 宽度。
+   - iPhone 验证单手操作，iPad 验证多栏布局和键盘、触控板。
+2. **本地身份与联系人绑定**
    - 用户创建一个 App 内联系人。
    - 先绑定微信身份。
    - 再手动绑定同一人的 QQ、小红书、抖音身份。
    - 支持一个 App 内联系人对应多个平台账号。
-2. **聊天记录导入**
+3. **聊天记录导入**
    - 支持用户主动导入聊天记录文件或截图。
    - 初期优先探索微信/QQ 可用导出格式。
    - 小红书、抖音先支持消息元数据与链接导入，不承诺完整记录抓取。
-3. **统一时间线**
+4. **统一时间线**
    - 按消息时间排序。
    - 每条消息展示平台、发送者、时间、正文、媒体占位、原帖链接。
    - 使用不同颜色和图标区分微信、QQ、小红书、抖音。
-4. **全局文本搜索**
+5. **全局文本搜索**
    - 支持超快本地全文搜索。
    - 支持联系人、平台、时间范围、标签、关键词组合过滤。
    - 搜索结果高亮命中词。
-5. **标签系统**
+6. **标签系统**
    - 内置标签：食物爱好、TODO、约定一起要做的事。
    - 支持自定义标签、标签颜色、备注。
    - 支持按联系人查看标签云或标签分组。
-6. **原帖跳转**
+7. **原帖跳转**
    - 对可识别的小红书/抖音链接提供“打开原帖”。
    - 不在 MVP 中强依赖登录第三方平台。
 
@@ -81,9 +85,10 @@
 - 云端多人协作和共享记忆库。
 - 图片 OCR、语音转文字、智能摘要。
 - 自动识别同一个人。
+- Mac 端正式发布。
 - Android 端正式发布。
 
-说明：Android 不进入 MVP 交付范围，但不是“以后再考虑”的模糊目标。MVP 必须采用跨平台核心架构，避免联系人绑定、导入、去重、搜索、标签等核心规则被锁死在 iOS 代码中。
+说明：Mac 与 Android 不进入首个 MVP 交付范围，但都是明确目标。MVP 必须采用跨平台核心架构，避免联系人绑定、导入、去重、搜索、标签等核心规则被锁死在单一设备端代码中。
 
 ## 5. 用户流程
 
@@ -216,6 +221,45 @@ MVP：
 
 任何情况下都不采用隐蔽抓取或绕过系统安全机制。
 
+### 6.7 iPhone / iPad / Mac 设备适配
+
+#### iPhone
+
+- 面向单手操作和快速检索。
+- 首页使用底部标签导航。
+- 搜索框常驻或易于触达。
+- 消息长按菜单支持加标签、复制、查看上下文、跳转原帖。
+- 优先保证小屏下的搜索结果密度和可读性。
+
+#### iPad
+
+- 使用 `sizeClass` / Adaptive Layout 适配横竖屏。
+- Regular 宽度下采用双栏或三栏布局：
+  - 左侧：联系人和标签导航
+  - 中间：统一时间线
+  - 右侧：消息详情、原帖信息或标签编辑
+- 支持 Split View、Slide Over、Stage Manager。
+- 支持外接键盘快捷键、触控板悬停和多选操作。
+- 可把搜索和标签管理作为大屏生产力场景。
+
+#### Mac
+
+- 使用原生 SwiftUI macOS 目标，优先于简单 Mac Catalyst 移植，保证窗口、菜单和文件系统能力自然。
+- 核心工作流：
+  - 多窗口时间线
+  - 侧边栏导航
+  - 全局搜索
+  - 批量打标签
+  - Finder 文件导入
+  - 拖拽导入
+  - 加密备份管理
+- 支持菜单栏命令和快捷键，例如：
+  - `Command + F`：搜索
+  - `Command + N`：新建联系人
+  - `Command + I`：导入记录
+  - `Command + 1/2/3`：切换时间线、标签、设置
+- Mac 不承诺读取微信 / QQ / 小红书 / 抖音桌面端私有数据，仍必须通过用户主动导入或分享。
+
 ## 7. 信息架构
 
 ### 7.1 页面结构
@@ -242,6 +286,14 @@ MVP：
    - 数据备份
    - 导入管理
    - 第三方授权管理
+
+### 7.2 设备导航差异
+
+| 设备 | 导航形态 | 布局重点 |
+|---|---|---|
+| iPhone | 底部标签 + NavigationStack | 单列时间线、易触达搜索、长按操作 |
+| iPad | NavigationSplitView | 双栏 / 三栏、多选、Split View、键盘快捷键 |
+| Mac | 侧边栏 + Toolbar + 多窗口 | 菜单栏、Finder 导入、拖拽导入、批量标注 |
 
 ## 8. 数据模型草案
 
@@ -301,10 +353,11 @@ MVP：
 
 ### 9.1 总体架构决策
 
-采用 **Kotlin Multiplatform Shared Core + 原生 iOS UI**：
+采用 **Kotlin Multiplatform Shared Core + 原生 SwiftUI UI**：
 
 ```text
-iOS App / SwiftUI
+iPhone / iPad App / SwiftUI
+Mac App / SwiftUI，后续正式接入
 Android App / Jetpack Compose，后续
         ↓
 KMP Shared Core
@@ -322,21 +375,30 @@ SQLite / FTS 索引
 
 选择原因：
 
-1. 当前目标是先发布 iOS MVP，同时 Android 是确定需求。
+1. 当前目标是先发布 iPhone / iPad MVP，同时 Mac 与 Android 是确定需求。
 2. 本产品的长期价值主要在数据导入、统一检索、标签沉淀和备份，而不只在 UI。
-3. SwiftUI 适合做高质量 iOS 界面，但不适合直接复用到 Android。
-4. KMP 允许 iOS 先使用 SwiftUI，同时把领域逻辑、数据模型和搜索规则放入共享模块。
+3. SwiftUI 适合做高质量 Apple 设备界面，但不适合直接复用到 Android。
+4. KMP 允许 Apple 端先使用 SwiftUI，同时把领域逻辑、数据模型和搜索规则放入共享模块。
 5. 后续 Android 使用 Jetpack Compose 接入同一核心，只重写 UI 与平台适配，不重写全部产品逻辑。
 
-### 9.2 iOS 客户端
+### 9.2 Apple 客户端
 
 - UI：SwiftUI
+- 设备目标：
+  - MVP：iPhone + iPad 通用 App
+  - 后续：原生 macOS SwiftUI App
 - 通过 KMP 产物接入共享领域层
 - 本地数据库：优先由共享层统一使用 SQLDelight / SQLite，避免 iOS 独自形成第二套业务数据库逻辑
 - 全文索引：SQLite FTS5；中文可用内置分词加自定义分词补丁，或接入本地分词库
 - 搜索响应：输入防抖 80ms～120ms，立即返回缓存结果
-- 本地加密：SQLCipher 或 iOS Data Protection
+- 本地加密：SQLCipher 或 Apple Data Protection
 - 备份：文件加密导出，优先不自动上云
+- KMP 编译目标至少包含：
+  - `iosArm64`
+  - `macosArm64`
+  - `macosX64`
+
+说明：iPhone / iPad / Mac 共享核心模型和业务规则，但 UI 布局、导航结构、文件导入入口和快捷键分别适配。避免把 iPad 简单拉伸成 Mac 界面。
 
 ### 9.3 Android 迁移策略
 
@@ -348,22 +410,37 @@ Android 正式启动时：
 - 不重写搜索语法、去重规则、时间线合并、标签状态机。
 - 使用 Android 平台适配实现文件选择、系统分享、OCR、生物识别和外部链接跳转。
 
-### 9.4 平台适配层
+### 9.4 Mac 迁移策略
 
-共享层定义接口，iOS 与 Android 各自实现：
+Mac 正式启动时：
 
-| 能力 | iOS 适配 | Android 适配 |
-|---|---|---|
-| 文件导入 | `fileImporter` / Files App | Storage Access Framework |
-| 系统分享接收 | Share Extension | Share Intent |
-| OCR | Vision Framework | ML Kit |
-| 隐私锁 | Face ID / Touch ID | Biometric API |
-| 原帖跳转 | Universal Links / custom scheme | App Links / Intent |
-| 安全存储 | Keychain / Data Protection | Keystore / EncryptedSharedPreferences |
+- 使用原生 SwiftUI macOS App，而不是优先选择 Mac Catalyst。
+- 复用 KMP Shared Core、SQLite 模型、导入解析、搜索语法和标签状态机。
+- 重新设计桌面端信息架构：
+  - NavigationSplitView 侧边栏
+  - Toolbar 搜索
+  - 菜单栏命令
+  - 多窗口
+  - 拖拽导入
+  - Finder 文件访问
+- Mac 上的导入入口更偏桌面工作流，例如批量选择文件、拖拽文件夹、观察指定导出目录。
+
+### 9.5 平台适配层
+
+共享层定义接口，Apple 设备与 Android 各自实现：
+
+| 能力 | iPhone / iPad 适配 | Mac 适配 | Android 适配 |
+|---|---|---|---|
+| 文件导入 | `fileImporter` / Files App | NSOpenPanel / Finder 拖拽 | Storage Access Framework |
+| 系统分享接收 | Share Extension | Share Extension / 拖拽导入 | Share Intent |
+| OCR | Vision Framework | Vision Framework | ML Kit |
+| 隐私锁 | Face ID / Touch ID / 密码 | 触控 ID / 密码 / 本地设备加密 | Biometric API |
+| 原帖跳转 | Universal Links / custom scheme | 默认浏览器打开 | App Links / Intent |
+| 安全存储 | Keychain / Data Protection | Keychain / App Sandbox | Keystore / EncryptedSharedPreferences |
 
 注意：平台差异不只是聊天记录来源。导入路径、权限、分享入口、OCR、后台限制和外部 App 唤起都需要单独适配。
 
-### 9.5 解析层
+### 9.6 解析层
 
 - 每个平台一个 Importer Adapter。
 - 导入流程统一为：
@@ -378,11 +455,11 @@ Android 正式启动时：
 Importer 分为两层：
 
 1. **共享解析层**：解析文本、时间、发送者、链接、媒体引用和平台元数据。
-2. **平台接入层**：iOS / Android 各自负责拿到原始文件或分享数据。
+2. **平台接入层**：iPhone / iPad / Mac / Android 各自负责拿到原始文件或分享数据。
 
-这样同一个微信记录解析器应尽量同时服务 iOS 与 Android；只有取文件的入口不同。
+这样同一个微信记录解析器应尽量同时服务 iPhone / iPad / Mac / Android；只有取文件的入口不同。
 
-### 9.6 去重策略
+### 9.7 去重策略
 
 - 以 `platform + chat_key + sender + timestamp + normalized_text + media_hash` 生成摘要。
 - 对同一秒多条消息加入序号或上下文指纹。
@@ -422,16 +499,22 @@ Importer 分为两层：
 
 ### 阶段 0：技术验证，1～2 周
 
-- 建立 KMP Shared Core 工程骨架，并验证 iOS SwiftUI 可直接调用共享模块。
+- 建立 KMP Shared Core 工程骨架，并验证 iPhone / iPad SwiftUI 可直接调用共享模块。
+- 增加 macOS 编译目标，验证同一核心可在 Mac 上运行。
 - 定义 Person、PlatformIdentity、Message、Tag、Fact 的共享模型。
 - 验证 iOS 本地数据库、加密、FTS5 搜索性能。
 - 为导入解析、去重、时间线合并、搜索语法和标签规则编写共享单元测试。
+- 建立 Apple 三端 UI 验证矩阵：
+  - iPad 真机：iOS 权限、Files、Share Extension、多栏布局
+  - iPhone Simulator：小屏、单手、底部导航
+  - Mac：窗口、菜单、Finder 导入、拖拽导入
 - 收集微信/QQ 可导出格式样本。
 - 明确小红书/抖音链接格式与跳转能力。
 - 输出数据格式规范。
 
 ### 阶段 1：MVP，6～8 周
 
+- iPhone / iPad 通用 App
 - 联系人与平台身份绑定
 - 文本记录导入
 - 统一时间线
@@ -442,6 +525,7 @@ Importer 分为两层：
 
 ### 阶段 2：体验增强，8～12 周
 
+- Mac SwiftUI 正式端
 - 截图导入与 OCR
 - 更好的中文分词和拼音搜索
 - 标签模板
@@ -474,6 +558,17 @@ Importer 分为两层：
 - 招募 10～15 对目标用户。
 - 衡量用户能否在 30 秒内完成一次跨平台搜索。
 - 衡量用户是否愿意手动导入一次真实数据。
+
+### 12.3 Apple 设备验证矩阵
+
+| 验证对象 | 验证目标 | 说明 |
+|---|---|---|
+| iPad 真机 | iOS 系统能力与真实数据入口 | 可作为当前主要真机测试设备，验证 Files、Share Extension、权限、触控板、键盘、Stage Manager |
+| iPhone Simulator | 小屏与单手交互 | 没有 iPhone 真机时，用 Xcode 模拟器覆盖 iPhone SE 到 Pro Max 尺寸 |
+| iPad 横竖屏 | Adaptive Layout | 验证 Compact / Regular、Split View、Slide Over、多栏导航 |
+| Mac | 桌面工作流 | 验证 macOS 编译目标、窗口管理、菜单命令、Finder 导入、拖拽导入 |
+
+注意：iPad 能覆盖大部分 iPadOS / iOS 系统能力验证，但不能完全替代 iPhone 测试。小屏布局、单手操作、Reachability、蜂窝网络、不同 Face ID / Touch ID 状态仍需通过 iPhone Simulator 或借用真机补充验证。
 
 ## 13. 开放问题
 

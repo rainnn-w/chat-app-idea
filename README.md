@@ -1,6 +1,6 @@
 # 聚合聊天记录产品构想
 
-这是一个面向小情侣、闺蜜和挚友的 iOS 优先产品仓库，目标是在用户授权与本地隐私优先的前提下，把微信、QQ、小红书、抖音中同一个人的聊天内容聚合到一个可检索、可标注、可回看的时间线中。
+这是一个面向小情侣、闺蜜和挚友的 Apple 设备优先产品仓库，目标是在用户授权与本地隐私优先的前提下，把微信、QQ、小红书、抖音中同一个人的聊天内容聚合到一个可检索、可标注、可回看的时间线中。
 
 当前仓库包含：
 
@@ -16,14 +16,16 @@
 2. **用户可控**：同一个人由用户手动确认，导入内容可删除、可重新同步。
 3. **渐进可行**：先做可靠的手动/半自动导入、统一搜索和标签，再探索实时同步与内容内嵌。
 4. **平台合规**：避免违反第三方平台条款，优先使用用户主动导出的数据、系统分享能力或官方能力。
-5. **架构可迁移**：iOS MVP 使用 SwiftUI，但产品核心采用 Kotlin Multiplatform，从第一天起避免把领域逻辑、导入解析、搜索和标签规则写成无法迁移的 SwiftUI 单体。
+5. **三端适配**：iPhone、iPad、Mac 使用 SwiftUI 适配各自设备形态；iPhone / iPad 优先发布，Mac 架构从第一天预留。
+6. **架构可迁移**：Apple 端 MVP 使用 SwiftUI，但产品核心采用 Kotlin Multiplatform，从第一天起避免把领域逻辑、导入解析、搜索和标签规则写成无法迁移的 SwiftUI 单体。
 
 ## 技术策略
 
-产品采用“iOS 先发布、核心可复用”的路线：
+产品采用“Apple 设备先发布、核心可复用”的路线：
 
 ```text
-iOS SwiftUI 界面
+iPhone / iPad SwiftUI 界面
+Mac SwiftUI 界面，后续正式接入
 Android Jetpack Compose 界面，后续接入
         ↓
 Kotlin Multiplatform Shared Core
@@ -37,4 +39,12 @@ Kotlin Multiplatform Shared Core
 SQLite / FTS 本地索引
 ```
 
-iOS 与 Android 分别实现各自的平台适配层，包括文件选择、系统分享入口、OCR、生物识别锁、原帖跳转和权限说明。这样 iOS MVP 可以快速推进，Android 正式启动时不需要重写全部产品逻辑。
+iPhone、iPad、Mac 与 Android 分别实现各自的平台适配层，包括文件选择、系统分享入口、OCR、生物识别锁、原帖跳转和权限说明。这样 Apple 端 MVP 可以快速推进，Android 正式启动时不需要重写全部产品逻辑。
+
+## 设备适配策略
+
+- **iPhone**：主打单手搜索、快速查看和消息标注，使用紧凑布局与底部主导航。
+- **iPad**：利用 Regular 宽度展示双栏或三栏结构，支持 Split View、Stage Manager、外接键盘和触控板。
+- **Mac**：使用原生 SwiftUI macOS 目标，提供多窗口、侧边栏导航、菜单栏命令、Finder 文件导入、拖拽导入和快捷键。
+
+开发验证顺序：先用 iPad 真机完成 iOS 能力测试，再用 Xcode iPhone Simulator 验证小屏与单手交互，最后接入 macOS 目标验证桌面工作流。
