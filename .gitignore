@@ -24,3 +24,6 @@ Pods/
 
 # Logs
 *.log
+
+# Distribution artifacts
+Prototype/dist/

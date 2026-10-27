@@ -46,3 +46,21 @@ xcodegen generate
 open ChatMemory.xcodeproj
 ```
 
+## 打包 Mac 试用版
+
+当前仓库可以在不安装完整 Xcode 的情况下，把 SwiftUI 原型打包成 `.app`、`.zip` 和 `.dmg`：
+
+```bash
+cd Prototype
+./Scripts/package-mac.sh
+```
+
+产物位于：
+
+```text
+Prototype/dist/ChatMemory-0.1.0-macOS.zip
+Prototype/dist/ChatMemory-0.1.0-macOS.dmg
+```
+
+这个包使用 ad-hoc 签名，未做 Apple Notarization。朋友首次打开时，如果 macOS 提示无法验证开发者，需要右键选择“打开”，或在“系统设置 > 隐私与安全性”里点击“仍要打开”。
+

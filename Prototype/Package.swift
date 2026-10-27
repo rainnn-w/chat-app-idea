@@ -32,6 +32,10 @@ let package = Package(
             dependencies: ["ChatMemoryUI"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .executableTarget(
+            name: "MacIconGenerator",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
         .testTarget(
             name: "ChatMemoryUITests",
             dependencies: ["ChatMemoryDomain"],
