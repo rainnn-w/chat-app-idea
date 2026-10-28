@@ -36,6 +36,9 @@ public struct AppRootView: View {
             #endif
         }
         .preferredColorScheme(nil)
+        .onAppear {
+            store.startInboxAutomation()
+        }
     }
 
     private var splitLayout: some View {

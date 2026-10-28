@@ -1,6 +1,9 @@
 import SwiftUI
 import ChatMemoryDomain
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
 
 struct SettingsScreen: View {
     @ObservedObject var store: ChatStore
@@ -12,6 +15,15 @@ struct SettingsScreen: View {
         formatter.unitsStyle = .short
         return formatter
     }()
+
+    private static let inboxPath = ChatStore.inboxDirectoryURL.path
+
+    private var automationTargetBinding: Binding<UUID?> {
+        Binding(
+            get: { store.automationTargetPersonID },
+            set: { store.setAutomationTarget($0) }
+        )
+    }
 
     var body: some View {
         ScrollView {
@@ -157,6 +169,63 @@ struct SettingsScreen: View {
                             .fill(Color.purple.opacity(0.06))
                     )
                 }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("自动导入 Inbox")
+                        .font(.system(size: 15, weight: .heavy))
+                        .foregroundStyle(ChatTheme.primaryText)
+
+                    Toggle("自动导入", isOn: Binding(
+                        get: { store.automationEnabled },
+                        set: { store.setAutomationEnabled($0) }
+                    ))
+
+                    Picker("目标联系人", selection: automationTargetBinding) {
+                        Text("未设置").tag(UUID?.none)
+                        ForEach(store.people) { person in
+                            Text(person.name).tag(UUID?.some(person.id))
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    Text(Self.inboxPath)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(ChatTheme.secondaryText)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+
+                    HStack {
+                        Button {
+                            store.importInboxFiles()
+                        } label: {
+                            Label("立即检查", systemImage: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.blue)
+                        }
+                        .buttonStyle(.plain)
+
+                        #if os(macOS)
+                        Button {
+                            NSWorkspace.shared.open(ChatStore.inboxDirectoryURL)
+                        } label: {
+                            Label("打开 Inbox", systemImage: "folder")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.purple)
+                        }
+                        .buttonStyle(.plain)
+                        #endif
+
+                        Text(store.automationStatus)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(ChatTheme.secondaryText)
+                            .lineLimit(3)
+                    }
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .fill(Color.blue.opacity(0.06))
+                )
 
                 VStack(alignment: .leading, spacing: 9) {
                     if let json = exportJSON() {

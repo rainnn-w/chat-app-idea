@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Darwin
 
 public final class ChatStore: ObservableObject {
     @Published public var people: [ChatPerson]
@@ -22,6 +23,13 @@ public final class ChatStore: ObservableObject {
     @Published public var isShowingResetConfirmation = false
     @Published public var isShowingSampleConfirmation = false
     @Published public var importError: String?
+    @Published public var automationTargetPersonID: UUID?
+    @Published public var automationEnabled = true
+    @Published public var isAutomationEnabled = true
+    @Published public var automationStatus = "待机"
+    @Published public var automationLastError: String?
+    @Published public var lastInboxImportAt: Date?
+    @Published public var inboxPendingCount = 0
     @Published public var searchText = "" {
         didSet { applySearch() }
     }
@@ -31,6 +39,11 @@ public final class ChatStore: ObservableObject {
     @Published public var selectedPlatforms: Set<ChatPlatform> = Set(ChatPlatform.allCases)
     @Published public private(set) var visibleMessages: [ChatMessage] = []
     public var onDidChange: (() -> Void)?
+    private var inboxWatcherSource: DispatchSourceFileSystemObject?
+    private var isInboxImportRunning = false
+    private var inboxAutomationStarted = false
+    private static let automationTargetDefaultsKey = "automationTargetPersonID"
+    private static let automationEnabledDefaultsKey = "isInboxAutomationEnabled"
 
     public init(
         people: [ChatPerson],
@@ -45,6 +58,17 @@ public final class ChatStore: ObservableObject {
         self.importStatuses = importStatuses
         self.importBatches = importBatches
         selectedPersonID = people.first?.id
+        automationTargetPersonID = selectedPersonID
+        automationEnabled = UserDefaults.standard.object(
+            forKey: Self.automationEnabledDefaultsKey
+        ) as? Bool ?? true
+
+        if let savedTarget = UserDefaults.standard.string(
+            forKey: Self.automationTargetDefaultsKey
+        ) {
+            automationTargetPersonID = UUID(uuidString: savedTarget)
+        }
+
         applySearch()
     }
 
@@ -191,6 +215,205 @@ public final class ChatStore: ObservableObject {
             importStatuses: importStatuses,
             importBatches: importBatches
         )
+    }
+
+    public static var inboxDirectoryURL: URL {
+        let supportDirectory = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("ChatMemory", isDirectory: true)
+        ?? FileManager.default.temporaryDirectory
+            .appendingPathComponent("ChatMemory", isDirectory: true)
+
+        return supportDirectory
+            .appendingPathComponent("Inbox", isDirectory: true)
+    }
+
+    public static var processedDirectoryURL: URL {
+        inboxDirectoryURL.appendingPathComponent("Processed", isDirectory: true)
+    }
+
+    public static var failedDirectoryURL: URL {
+        inboxDirectoryURL.appendingPathComponent("Failed", isDirectory: true)
+    }
+
+    public func startInboxAutomation() {
+        guard !inboxAutomationStarted else { return }
+        guard isAutomationEnabled else {
+            automationStatus = "自动导入已关闭"
+            return
+        }
+
+        inboxAutomationStarted = true
+        prepareInbox()
+        importInboxFiles()
+        startInboxWatcher()
+    }
+
+    public func stopInboxAutomation() {
+        inboxWatcherSource?.cancel()
+        inboxWatcherSource = nil
+        automationStatus = "已停止监听"
+    }
+
+    public func setAutomationTarget(_ personID: UUID?) {
+        automationTargetPersonID = personID
+        UserDefaults.standard.set(personID?.uuidString, forKey: Self.automationTargetDefaultsKey)
+    }
+
+    public func setAutomationEnabled(_ enabled: Bool) {
+        automationEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: Self.automationEnabledDefaultsKey)
+        if enabled {
+            startInboxAutomation()
+        } else {
+            stopInboxAutomation()
+        }
+    }
+
+    public func prepareInbox() {
+        let fileManager = FileManager.default
+        try? fileManager.createDirectory(
+            at: Self.inboxDirectoryURL,
+            withIntermediateDirectories: true
+        )
+        try? fileManager.createDirectory(
+            at: Self.processedDirectoryURL,
+            withIntermediateDirectories: true
+        )
+        try? fileManager.createDirectory(
+            at: Self.failedDirectoryURL,
+            withIntermediateDirectories: true
+        )
+        refreshInboxPendingCount()
+    }
+
+    public func importInboxFiles() {
+        guard isAutomationEnabled, !isInboxImportRunning else { return }
+        isInboxImportRunning = true
+        automationStatus = "正在检查 Inbox"
+        prepareInbox()
+
+        let supportedExtensions: Set<String> = [
+            "json", "ndjson", "html", "htm", "mht", "mhtml",
+            "db", "sqlite", "sqlite3", "db3"
+        ]
+        let fileManager = FileManager.default
+        var reports: [String] = []
+
+        let files = ((try? fileManager.contentsOfDirectory(
+            at: Self.inboxDirectoryURL,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )) ?? [])
+            .filter { url in
+                supportedExtensions.contains(url.pathExtension.lowercased())
+            }
+            .sorted { lhs, rhs in
+                let lhsDate = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate ?? .distantPast
+                let rhsDate = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate ?? .distantPast
+                return lhsDate < rhsDate
+            }
+
+        if files.isEmpty {
+            inboxPendingCount = 0
+            automationStatus = "Inbox 已是最新"
+            isInboxImportRunning = false
+            return
+        }
+
+        inboxPendingCount = files.count
+
+        for fileURL in files {
+            automationStatus = "正在导入 \(fileURL.lastPathComponent)"
+
+            do {
+                let data = try Data(contentsOf: fileURL)
+                let output = try RealChatImporter().parse(data: data, url: fileURL)
+
+                guard let personID = automationTargetPersonID ?? selectedPersonID else {
+                    throw ImportError(message: "还没有设置自动导入联系人。")
+                }
+
+                guard importRealRecords(
+                    output.records,
+                    personID: personID,
+                    fileName: fileURL.lastPathComponent,
+                    format: output.format,
+                    now: Date()
+                ) != nil else {
+                    throw ImportError(message: "没有可用的导入联系人。")
+                }
+
+                try moveInboxFile(fileURL, to: Self.processedDirectoryURL)
+                reports.append("✅ \(fileURL.lastPathComponent)：导入 \(output.records.count) 条")
+            } catch {
+                let message = error.localizedDescription
+                automationLastError = message
+                reports.append("❌ \(fileURL.lastPathComponent)：\(message)")
+                try? moveInboxFile(fileURL, to: Self.failedDirectoryURL)
+            }
+        }
+
+        lastInboxImportAt = Date()
+        inboxPendingCount = 0
+        automationStatus = reports.joined(separator: "\n")
+        isInboxImportRunning = false
+        refreshInboxPendingCount()
+    }
+
+    public func refreshInboxPendingCount() {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: Self.inboxDirectoryURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        inboxPendingCount = files.count
+    }
+
+    private func startInboxWatcher() {
+        guard inboxWatcherSource == nil else { return }
+
+        let path = Self.inboxDirectoryURL.path
+        let descriptor = open(path, O_EVTONLY)
+        guard descriptor >= 0 else {
+            automationLastError = "无法监听 Inbox 目录。"
+            return
+        }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: descriptor,
+            eventMask: [.write, .delete, .rename, .extend],
+            queue: .main
+        )
+
+        source.setEventHandler { [weak self] in
+            DispatchQueue.main.async {
+                self?.importInboxFiles()
+            }
+        }
+
+        source.setCancelHandler {
+            close(descriptor)
+        }
+
+        source.resume()
+        inboxWatcherSource = source
+        automationStatus = "正在监听 Inbox"
+    }
+
+    private func moveInboxFile(_ source: URL, to directory: URL) throws {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let destination = directory.appendingPathComponent(
+            "\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString)-\(source.lastPathComponent)"
+        )
+
+        try fileManager.moveItem(at: source, to: destination)
+        refreshInboxPendingCount()
     }
 
     @discardableResult
