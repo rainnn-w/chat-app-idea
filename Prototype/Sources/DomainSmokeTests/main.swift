@@ -279,6 +279,7 @@ enum DomainSmokeTests {
             .appendingPathComponent("Message", isDirectory: true)
         try? FileManager.default.createDirectory(at: scanRoot, withIntermediateDirectories: true)
         try? Data("SQLite format 3\0fixture".utf8).write(to: scanRoot.appendingPathComponent("Chat_test.db"))
+        try? Data("encrypted-sqlcipher-fixture".utf8).write(to: scanRoot.appendingPathComponent("Chat_encrypted.db"))
         try? Data("not a database".utf8).write(to: scanRoot.appendingPathComponent("notes.txt"))
 
         let scanResult = ChatArchiveScanner().scanDirectories(
@@ -286,22 +287,36 @@ enum DomainSmokeTests {
             platform: .wechat,
             format: .wechatSQLite
         )
-        expect(scanResult.archives.count == 1, "微信数据库扫描")
+        expect(scanResult.archives.count == 2, "微信数据库扫描")
         expect(
-            scanResult.archives.first?.fileName == "Chat_test.db",
-            "微信扫描文件名"
+            scanResult.archives.contains { $0.fileName == "Chat_test.db" && !$0.isEncrypted },
+            "未加密微信数据库扫描"
         )
         expect(
             scanResult.archives.first?.reason == "微信 Message 目录",
             "微信扫描目录：\(scanResult.archives.first?.reason ?? "nil") / \(scanResult.archives.first?.relativePath ?? "nil")"
         )
+        expect(
+            scanResult.archives.contains { $0.fileName == "Chat_encrypted.db" && $0.isEncrypted },
+            "加密微信数据库识别"
+        )
+
+        do {
+            _ = try importer.parse(
+                data: Data("encrypted-sqlcipher-fixture".utf8),
+                url: URL(fileURLWithPath: "/tmp/message_encrypted.db")
+            )
+            failures.append("加密微信数据库应当拒绝导入")
+        } catch {
+            expect(!error.localizedDescription.isEmpty, "加密微信数据库错误提示")
+        }
 
         try? FileManager.default.removeItem(at: scanRoot.deletingLastPathComponent())
 
         try? FileManager.default.removeItem(at: repositoryURL)
 
         if failures.isEmpty {
-            print("Domain smoke tests passed: 26/26")
+            print("Domain smoke tests passed: 28/28")
         } else {
             print("Domain smoke tests failed:")
             failures.forEach { print(" - \($0)") }

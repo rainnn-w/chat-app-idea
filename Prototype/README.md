@@ -65,8 +65,8 @@ cd Prototype
 产物位于：
 
 ```text
-Prototype/dist/ChatMemory-0.5.0-macOS.zip
-Prototype/dist/ChatMemory-0.5.0-macOS.dmg
+Prototype/dist/ChatMemory-0.5.1-macOS.zip
+Prototype/dist/ChatMemory-0.5.1-macOS.dmg
 ```
 
 这个包使用 ad-hoc 签名，未做 Apple Notarization。朋友首次打开时，如果 macOS 提示无法验证开发者，需要右键选择“打开”，或在“系统设置 > 隐私与安全性”里点击“仍要打开”。

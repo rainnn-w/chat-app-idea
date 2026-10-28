@@ -3,6 +3,7 @@ import SQLite3
 
 public enum ImportFormat: String, Codable, Hashable, CaseIterable {
     case wechatSQLite
+    case encryptedWechatSQLite
     case qqHTMLArchive
     case xiaohongshuExport
     case douyinExport
@@ -11,6 +12,7 @@ public enum ImportFormat: String, Codable, Hashable, CaseIterable {
     public var title: String {
         switch self {
         case .wechatSQLite: "微信本地数据库"
+        case .encryptedWechatSQLite: "加密微信数据库"
         case .qqHTMLArchive: "QQ 网页归档"
         case .xiaohongshuExport: "小红书导出数据"
         case .douyinExport: "抖音导出数据"
@@ -22,6 +24,8 @@ public enum ImportFormat: String, Codable, Hashable, CaseIterable {
         switch self {
         case .wechatSQLite:
             "选择微信 Mac/iOS 备份中的 Message/*.db SQLite 文件。若数据库已加密，需要先使用官方备份或可信工具解密。"
+        case .encryptedWechatSQLite:
+            "这是微信 4.x 的 SQLCipher 加密数据库。ChatMemory 不会读取或推导微信密钥；请先用官方迁移/备份流程生成可读数据，或选择未加密的数据库文件。"
         case .qqHTMLArchive:
             "选择 QQ 导出的 .mht / .html 聊天归档。"
         case .xiaohongshuExport:
@@ -148,10 +152,14 @@ public struct RealChatImporter {
 
     public init() {}
 
+    public static func isSQLiteDatabase(_ data: Data) -> Bool {
+        data.starts(with: Data("SQLite format 3\0".utf8))
+    }
+
     public func detectFormat(url: URL, data: Data) -> ImportFormat {
         let ext = url.pathExtension.lowercased()
         if ["db", "sqlite", "sqlite3", "db3"].contains(ext) {
-            return .wechatSQLite
+            return Self.isSQLiteDatabase(data) ? .wechatSQLite : .encryptedWechatSQLite
         }
 
         let sample = String(decoding: data.prefix(2_000_000), as: UTF8.self).lowercased()
@@ -184,6 +192,10 @@ public struct RealChatImporter {
         switch format {
         case .wechatSQLite:
             return try parseSQLite(data: data, url: url, platform: .wechat)
+        case .encryptedWechatSQLite:
+            throw ImportError(
+                message: "微信数据库已加密（SQLCipher）。ChatMemory 不会读取或推导微信密钥，因此不能直接导入这个文件。"
+            )
         case .genericJSON, .xiaohongshuExport, .douyinExport:
             return try parseJSON(data: data, url: url, fallbackPlatform: format.fallbackPlatform)
         case .qqHTMLArchive:
@@ -248,6 +260,12 @@ private extension RealChatImporter {
     }
 
     func parseSQLite(data: Data, url: URL, platform: ChatPlatform) throws -> ImportOutput {
+        guard Self.isSQLiteDatabase(data) else {
+            throw ImportError(
+                message: "微信数据库已加密（SQLCipher）。请选择未加密的数据库，或使用官方迁移/备份流程生成可读数据。"
+            )
+        }
+
         let temporaryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("chatmemory-import-\(UUID().uuidString)-\(url.lastPathComponent)")
         try data.write(to: temporaryURL)

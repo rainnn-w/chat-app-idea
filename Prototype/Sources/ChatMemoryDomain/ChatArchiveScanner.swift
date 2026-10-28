@@ -10,10 +10,12 @@ public struct DiscoveredChatArchive: Identifiable, Hashable {
     public var sizeBytes: Int64
     public var modifiedAt: Date
     public var reason: String
+    public var isEncrypted = false
 
     public var formattedSize: String {
         ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file)
     }
+
 }
 
 public struct ChatArchiveScanResult: Hashable {
@@ -138,6 +140,9 @@ public struct ChatArchiveScanner {
                         continue
                     }
 
+                    let header = fileHeader(at: fileURL)
+                    let isEncrypted = !RealChatImporter.isSQLiteDatabase(header)
+
                     let relativePath = path
                         .replacingOccurrences(of: root.path + "/", with: "")
                     let reason: String
@@ -159,7 +164,8 @@ public struct ChatArchiveScanner {
                             relativePath: relativePath,
                             sizeBytes: Int64(size),
                             modifiedAt: values.contentModificationDate ?? .distantPast,
-                            reason: reason
+                            reason: reason,
+                            isEncrypted: isEncrypted
                         )
                     )
                 } catch {
@@ -181,6 +187,15 @@ public struct ChatArchiveScanner {
             unreadableDirectories: unreadableDirectories,
             warnings: Array(warnings.prefix(5))
         )
+    }
+
+    private func fileHeader(at url: URL) -> Data {
+        guard fileManager.isReadableFile(atPath: url.path),
+              let handle = try? FileHandle(forReadingFrom: url) else {
+            return Data()
+        }
+        defer { try? handle.close() }
+        return (try? handle.read(upToCount: 16)) ?? Data()
     }
 }
 

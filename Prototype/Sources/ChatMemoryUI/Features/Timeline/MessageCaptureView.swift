@@ -283,7 +283,9 @@ struct MessageCaptureView: View {
                             HStack(spacing: 10) {
                                 IconBadge(
                                     systemName: "cylinder.split.1x2.fill",
-                                    tint: model.selectedArchiveID == archive.id ? .purple : .green,
+                                    tint: archive.isEncrypted
+                                        ? .red
+                                        : model.selectedArchiveID == archive.id ? .purple : .green,
                                     size: 32
                                 )
 
@@ -308,6 +310,11 @@ struct MessageCaptureView: View {
                                     Text(archive.reason)
                                         .font(.system(size: 10, weight: .semibold))
                                         .foregroundStyle(ChatTheme.tertiaryText)
+                                    if archive.isEncrypted {
+                                        Text("已加密")
+                                            .font(.system(size: 10, weight: .heavy))
+                                            .foregroundStyle(.red)
+                                    }
                                 }
                             }
                             .padding(9)
@@ -330,6 +337,7 @@ struct MessageCaptureView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .disabled(archive.isEncrypted)
                     }
                 }
             }
