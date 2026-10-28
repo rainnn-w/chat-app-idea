@@ -6,6 +6,7 @@ public final class ChatStore: ObservableObject {
     @Published public var messages: [ChatMessage]
     @Published public var tags: [ChatTag]
     @Published public var importStatuses: [ImportStatus]
+    @Published public var importBatches: [ImportBatch]
     @Published public var selectedPersonID: UUID?
     @Published public var selectedMessageID: UUID?
     @Published public var hoveringMessageID: UUID?
@@ -15,6 +16,7 @@ public final class ChatStore: ObservableObject {
     @Published public var isShowingPersonEditorSheet = false
     @Published public var isShowingMessageEditorSheet = false
     @Published public var isShowingDeleteMessageConfirmation = false
+    @Published public var isSelectingRecordFile = false
     @Published public var isShowingJSONImporter = false
     @Published public var isShowingResetConfirmation = false
     @Published public var isShowingSampleConfirmation = false
@@ -33,12 +35,14 @@ public final class ChatStore: ObservableObject {
         people: [ChatPerson],
         messages: [ChatMessage],
         tags: [ChatTag],
-        importStatuses: [ImportStatus]
+        importStatuses: [ImportStatus],
+        importBatches: [ImportBatch] = []
     ) {
         self.people = people
         self.messages = messages
         self.tags = tags
         self.importStatuses = importStatuses
+        self.importBatches = importBatches
         selectedPersonID = people.first?.id
         applySearch()
     }
@@ -169,6 +173,7 @@ public final class ChatStore: ObservableObject {
         messages = snapshot.messages
         tags = snapshot.tags
         importStatuses = snapshot.importStatuses
+        importBatches = snapshot.importBatches
         selectedPersonID = people.first?.id
         selectedMessageID = nil
         selectedPlatforms = Set(ChatPlatform.allCases)
@@ -182,8 +187,77 @@ public final class ChatStore: ObservableObject {
             people: people,
             messages: messages,
             tags: tags,
-            importStatuses: importStatuses
+            importStatuses: importStatuses,
+            importBatches: importBatches
         )
+    }
+
+    @discardableResult
+    public func importRealRecords(
+        _ records: [RawImportRecord],
+        personID: UUID? = nil,
+        fileName: String,
+        format: ImportFormat,
+        now: Date = Date()
+    ) -> ImportBatch? {
+        guard let targetPersonID = personID ?? selectedPersonID,
+              people.contains(where: { $0.id == targetPersonID }) else { return nil }
+
+        let batchID = UUID()
+        var imported = 0
+        var skipped = 0
+        var warnings: [String] = []
+        var signatures = Set(messages.compactMap(\.sourceIdentifier))
+        var legacySignatures = Set(messages.map(\.dedupSignature))
+
+        for record in records {
+            let normalizedText = record.text
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedText.isEmpty else {
+                skipped += 1
+                continue
+            }
+
+            let sourceIdentifier = record.sourceIdentifier
+            let signature = record.dedupSignature
+            if signatures.contains(sourceIdentifier) || legacySignatures.contains(signature) {
+                skipped += 1
+                continue
+            }
+
+            let message = record.makeMessage(
+                personID: targetPersonID,
+                batchID: batchID
+            )
+            messages.append(message)
+            signatures.insert(sourceIdentifier)
+            legacySignatures.insert(signature)
+            imported += 1
+        }
+
+        let usedPlatforms = Set(records.map(\.platform))
+        usedPlatforms.forEach { markImported(platform: $0, at: now) }
+
+        if records.isEmpty {
+            warnings.append("没有解析到可导入的消息。")
+        }
+        if skipped > 0 {
+            warnings.append("跳过 \(skipped) 条重复或空白消息。")
+        }
+
+        let batch = ImportBatch(
+            id: batchID,
+            fileName: fileName,
+            format: format,
+            importedCount: imported,
+            skippedCount: skipped,
+            importedAt: now,
+            warnings: warnings
+        )
+        importBatches.append(batch)
+        applySearch()
+        persist()
+        return batch
     }
 
     public func markImported(platform: ChatPlatform, at date: Date = Date()) {

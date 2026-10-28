@@ -1,5 +1,6 @@
 import SwiftUI
 import ChatMemoryDomain
+import UniformTypeIdentifiers
 
 struct MessageCaptureView: View {
     @ObservedObject var store: ChatStore
@@ -23,10 +24,16 @@ struct MessageCaptureView: View {
                     if model.mode == .single {
                         singleForm
                     } else {
-                        bulkForm
+                        realFileForm
                     }
                 }
                 .padding(15)
+            }
+
+            if let error = model.errorMessage {
+                Text(error)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.red)
             }
 
             HStack {
@@ -40,14 +47,25 @@ struct MessageCaptureView: View {
             }
         }
         .padding(20)
-        .frame(width: 540, height: model.mode == .single ? 580 : 480)
+        .frame(width: 580, height: model.mode == .single ? 590 : 650)
         .background(ChatTheme.canvasGradient(for: colorScheme))
         .animation(ChatTheme.smooth, value: model.mode)
+        .fileImporter(
+            isPresented: $store.isSelectingRecordFile,
+            allowedContentTypes: [.data],
+            allowsMultipleSelection: false
+        ) { result in
+            model.selectFile(from: result)
+        }
     }
 
     private var header: some View {
         HStack(spacing: 10) {
-            IconBadge(systemName: "plus.square.dashed.on.square", tint: .purple, size: 40)
+            IconBadge(
+                systemName: model.mode == .single ? "plus.square.dashed.on.square" : "shippingbox.fill",
+                tint: .purple,
+                size: 40
+            )
             VStack(alignment: .leading, spacing: 2) {
                 Text("录入聊天记忆")
                     .font(.system(size: 21, weight: .heavy))
@@ -78,16 +96,113 @@ struct MessageCaptureView: View {
         }
     }
 
-    private var bulkForm: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            platformPicker
-            senderPicker(allowSystem: false)
+    private var realFileForm: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            HStack(spacing: 10) {
+                Button {
+                    store.isSelectingRecordFile = true
+                } label: {
+                    Label(model.selectedFileName == nil ? "选择记录文件" : "更换文件", systemImage: "folder.badge.plus")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Capsule(style: .continuous).fill(ChatTheme.heroGradient))
+                }
+                .buttonStyle(PressableButtonStyle())
 
-            LabeledEditor(title: "每行一条消息", text: $model.bulkText, minHeight: 175)
+                if model.isProcessing {
+                    ProgressView()
+                        .controlSize(.small)
+                }
 
-            Text("适合快速粘贴口头约定、食物偏好或待办事项。")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(ChatTheme.tertiaryText)
+                Spacer()
+            }
+
+            if let fileName = model.selectedFileName {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc.badge.gearshape.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.purple)
+                        Text(fileName)
+                            .font(.system(size: 13, weight: .bold))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+
+                    if let format = model.detectedFormat {
+                        Label(format.title, systemImage: "checkmark.seal.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.green)
+                    }
+
+                    Text(model.detectedFormat?.guidance ?? "")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(ChatTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .fill(Color.purple.opacity(0.08))
+                )
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("支持真实来源数据")
+                        .font(.system(size: 15, weight: .heavy))
+                        .foregroundStyle(ChatTheme.primaryText)
+
+                    supportedFormatRow("微信", "Message/*.db SQLite")
+                    supportedFormatRow("QQ", ".mht / .html 网页归档")
+                    supportedFormatRow("小红书", "账号导出 JSON / NDJSON / HTML")
+                    supportedFormatRow("抖音", "账号导出 JSON / NDJSON / HTML")
+                    supportedFormatRow("通用", "messages / data / items / records JSON")
+                }
+            }
+
+            if let output = model.importOutput {
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack {
+                        Label("解析到 \(output.records.count) 条消息", systemImage: "tray.full.fill")
+                            .font(.system(size: 13, weight: .heavy))
+                            .foregroundStyle(.green)
+                        Spacer()
+                    }
+
+                    ForEach(output.records.prefix(3)) { record in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("\(record.platform.displayName) · \(record.sender.displayName)")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(record.platform.accent)
+                            Text(record.text)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(ChatTheme.secondaryText)
+                                .lineLimit(2)
+                        }
+                        .padding(.vertical, 2)
+                    }
+
+                    if output.records.count > 3 {
+                        Text("还有 \(output.records.count - 3) 条…")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(ChatTheme.tertiaryText)
+                    }
+
+                    ForEach(output.warnings, id: \.self) { warning in
+                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .fill(Color.green.opacity(0.08))
+                )
+            }
         }
     }
 
@@ -96,7 +211,7 @@ struct MessageCaptureView: View {
             model.save(to: store)
             dismiss()
         } label: {
-            Label("保存", systemImage: "tray.and.arrow.down.fill")
+            Label("导入并保存", systemImage: "tray.and.arrow.down.fill")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 16)
@@ -147,6 +262,18 @@ struct MessageCaptureView: View {
         .pickerStyle(.segmented)
     }
 
+    private func supportedFormatRow(_ app: String, _ format: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(app)
+                .font(.system(size: 12, weight: .heavy))
+                .foregroundStyle(ChatTheme.primaryText)
+                .frame(width: 46, alignment: .leading)
+            Text(format)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(ChatTheme.secondaryText)
+        }
+    }
+
     private var fieldBackground: some View {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
             .fill(ChatTheme.surface(for: colorScheme))
@@ -194,42 +321,43 @@ struct MessageCaptureView: View {
         }
     }
 }
-
 final class MessageCaptureModel: ObservableObject {
-    @Published var mode = CaptureMode.single
+    @Published var mode = MessageCaptureModel.CaptureMode.single
     @Published var text = ""
-    @Published var bulkText = ""
     @Published var platform: ChatPlatform = .wechat
     @Published var sender: MessageSender = .peer
     @Published var sentAt = Date()
     @Published var externalTitle = ""
     @Published var externalURL = ""
     @Published var selectedTags: Set<UUID> = []
+    @Published var selectedFileName: String?
+    @Published var selectedFileURL: URL?
+    @Published var selectedFileData: Data?
+    @Published var detectedFormat: ImportFormat?
+    @Published var importOutput: ImportOutput?
+    @Published var errorMessage: String?
+    @Published var isProcessing = false
 
     enum CaptureMode: String, CaseIterable, Identifiable {
         case single
-        case bulk
+        case realFile
 
         var id: String { rawValue }
         var title: String {
             switch self {
             case .single: "单条"
-            case .bulk: "多行"
+            case .realFile: "真实记录文件"
             }
         }
     }
 
     var canSave: Bool {
-        mode == .single
-            ? !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            : !bulkLines.isEmpty
-    }
-
-    var bulkLines: [String] {
-        bulkText
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
+        switch mode {
+        case .single:
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .realFile:
+            return selectedFileURL != nil && selectedFileData != nil && importOutput != nil && !isProcessing
+        }
     }
 
     func toggle(_ tag: ChatTag) {
@@ -240,10 +368,51 @@ final class MessageCaptureModel: ObservableObject {
         }
     }
 
+    @MainActor
+    func selectFile(from result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            let didStartAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccess {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            do {
+                let data = try Data(contentsOf: url)
+                isProcessing = true
+                errorMessage = nil
+                selectedFileURL = url
+                selectedFileName = url.lastPathComponent
+                selectedFileData = data
+
+                let importer = RealChatImporter()
+                let output = try importer.parse(data: data, url: url)
+                detectedFormat = output.format
+                importOutput = output
+            } catch {
+                selectedFileName = nil
+                selectedFileURL = nil
+                selectedFileData = nil
+                detectedFormat = nil
+                importOutput = nil
+                errorMessage = "读取失败：\(error.localizedDescription)"
+            }
+
+            isProcessing = false
+
+        case .failure(let error):
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func save(to store: ChatStore) {
         guard let personID = store.selectedPersonID else { return }
 
-        if mode == .single {
+        switch mode {
+        case .single:
             store.addMessage(
                 personID: personID,
                 platform: platform,
@@ -254,16 +423,16 @@ final class MessageCaptureModel: ObservableObject {
                 externalURL: externalURL,
                 tagIDs: selectedTags
             )
-        } else {
-            for (offset, line) in bulkLines.enumerated() {
-                store.addMessage(
-                    personID: personID,
-                    platform: platform,
-                    sender: sender,
-                    sentAt: sentAt.addingTimeInterval(TimeInterval(-offset)),
-                    text: line
-                )
-            }
+
+        case .realFile:
+            guard let output = importOutput,
+                  let url = selectedFileURL else { return }
+            store.importRealRecords(
+                output.records,
+                personID: personID,
+                fileName: url.lastPathComponent,
+                format: output.format
+            )
         }
     }
 }

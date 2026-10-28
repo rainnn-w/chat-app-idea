@@ -5,17 +5,29 @@ public struct ChatStoreSnapshot: Codable {
     public var messages: [ChatMessage]
     public var tags: [ChatTag]
     public var importStatuses: [ImportStatus]
+    public var importBatches: [ImportBatch]
 
     public init(
         people: [ChatPerson],
         messages: [ChatMessage],
         tags: [ChatTag],
-        importStatuses: [ImportStatus]
+        importStatuses: [ImportStatus],
+        importBatches: [ImportBatch] = []
     ) {
         self.people = people
         self.messages = messages
         self.tags = tags
         self.importStatuses = importStatuses
+        self.importBatches = importBatches
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        people = try container.decode([ChatPerson].self, forKey: .people)
+        messages = try container.decode([ChatMessage].self, forKey: .messages)
+        tags = try container.decode([ChatTag].self, forKey: .tags)
+        importStatuses = try container.decode([ImportStatus].self, forKey: .importStatuses)
+        importBatches = try container.decodeIfPresent([ImportBatch].self, forKey: .importBatches) ?? []
     }
 }
 
@@ -57,7 +69,8 @@ public final class ChatStoreRepository {
                 people: snapshot.people,
                 messages: snapshot.messages,
                 tags: snapshot.tags,
-                importStatuses: snapshot.importStatuses
+                importStatuses: snapshot.importStatuses,
+                importBatches: snapshot.importBatches
             )
         } catch {
             if fileManager.fileExists(atPath: fileURL.path) {
@@ -74,7 +87,8 @@ public final class ChatStoreRepository {
             people: store.people,
             messages: store.messages,
             tags: store.tags,
-            importStatuses: store.importStatuses
+            importStatuses: store.importStatuses,
+            importBatches: store.importBatches
         )
 
         try fileManager.createDirectory(
@@ -83,7 +97,7 @@ public final class ChatStoreRepository {
         )
 
         let data = try encoder.encode(snapshot)
-        try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+        try data.write(to: fileURL, options: [.atomic])
     }
 
     public func delete() throws {

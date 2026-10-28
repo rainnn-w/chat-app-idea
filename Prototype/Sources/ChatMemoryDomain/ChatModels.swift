@@ -132,6 +132,23 @@ public struct ChatMessage: Identifiable, Hashable, Codable {
     public var externalURL: String?
     public var tagIDs: Set<UUID>
     public var isFavorite: Bool
+    public var sourceIdentifier: String?
+    public var importBatchID: UUID?
+    public var confidence: Double?
+
+    public var dedupSignature: String {
+        let normalizedText = text
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        return [
+            platform.rawValue,
+            sentAt.timeIntervalSince1970.description,
+            normalizedText.lowercased(),
+            externalTitle?.lowercased() ?? "",
+            externalURL?.lowercased() ?? ""
+        ].joined(separator: "|")
+    }
 
     public init(
         id: UUID = UUID(),
@@ -143,7 +160,10 @@ public struct ChatMessage: Identifiable, Hashable, Codable {
         externalTitle: String? = nil,
         externalURL: String? = nil,
         tagIDs: Set<UUID> = [],
-        isFavorite: Bool = false
+        isFavorite: Bool = false,
+        sourceIdentifier: String? = nil,
+        importBatchID: UUID? = nil,
+        confidence: Double? = nil
     ) {
         self.id = id
         self.personID = personID
@@ -155,6 +175,37 @@ public struct ChatMessage: Identifiable, Hashable, Codable {
         self.externalURL = externalURL
         self.tagIDs = tagIDs
         self.isFavorite = isFavorite
+        self.sourceIdentifier = sourceIdentifier
+        self.importBatchID = importBatchID
+        self.confidence = confidence
+    }
+}
+
+public struct ImportBatch: Identifiable, Hashable, Codable {
+    public var id: UUID
+    public var fileName: String
+    public var format: ImportFormat
+    public var importedCount: Int
+    public var skippedCount: Int
+    public var importedAt: Date
+    public var warnings: [String]
+
+    public init(
+        id: UUID = UUID(),
+        fileName: String,
+        format: ImportFormat,
+        importedCount: Int,
+        skippedCount: Int,
+        importedAt: Date = Date(),
+        warnings: [String] = []
+    ) {
+        self.id = id
+        self.fileName = fileName
+        self.format = format
+        self.importedCount = importedCount
+        self.skippedCount = skippedCount
+        self.importedAt = importedAt
+        self.warnings = warnings
     }
 }
 

@@ -179,7 +179,7 @@ enum DomainSmokeTests {
             )
         )
 
-        expect(persistenceError == nil, "JSON 写入")
+        expect(persistenceError == nil, "JSON 写入\(persistenceError.map { "：\($0)" } ?? "")")
 
         let restored = repository.load(seed: ChatStore(
             people: [],
@@ -205,10 +205,79 @@ enum DomainSmokeTests {
             )
         }
 
+        let importer = RealChatImporter()
+        let jsonURL = URL(fileURLWithPath: "/tmp/chatmemory-wechat-sample.json")
+        let jsonData = Data("""
+        {
+          "data": {
+            "messages": [
+              {
+                "msgId": "wx-1001",
+                "createTime": 1800000000,
+                "strContent": "不要香菜",
+                "isMe": false,
+                "platform": "微信"
+              }
+            ]
+          }
+        }
+        """.utf8)
+
+        do {
+            let output = try importer.parse(data: jsonData, url: jsonURL)
+            expect(output.records.count == 1, "微信 JSON 导入")
+            expect(output.records.first?.platform == .wechat, "微信 JSON 平台")
+            expect(output.records.first?.text == "不要香菜", "微信 JSON 内容")
+
+            let importStore = ChatStore(
+                people: [person],
+                messages: [],
+                tags: [food],
+                importStatuses: []
+            )
+            let firstBatch = importStore.importRealRecords(
+                output.records,
+                personID: person.id,
+                fileName: "wechat.json",
+                format: output.format
+            )
+            let secondBatch = importStore.importRealRecords(
+                output.records,
+                personID: person.id,
+                fileName: "wechat.json",
+                format: output.format
+            )
+            expect(firstBatch?.importedCount == 1, "首次真实导入")
+            expect(secondBatch?.importedCount == 0 && secondBatch?.skippedCount == 1, "重复导入去重")
+            expect(
+                importStore.messages.first?.sourceIdentifier == "chatmemory-wechat-sample.json:wx-1001",
+                "导入来源标识：\(importStore.messages.first?.sourceIdentifier ?? "nil")"
+            )
+        } catch {
+            failures.append("真实 JSON 导入：\(error)")
+        }
+
+        let htmlURL = URL(fileURLWithPath: "/tmp/chatmemory-qq-sample.mht")
+        let htmlData = Data("""
+        <html><body><h1>QQ 聊天记录</h1>
+        <table>
+          <tr><td>我</td><td>2026-10-28 10:00</td><td>看看这个 https://example.com</td></tr>
+        </table></body></html>
+        """.utf8)
+
+        do {
+            let htmlOutput = try importer.parse(data: htmlData, url: htmlURL)
+            expect(htmlOutput.records.count == 1, "QQ HTML 导入")
+            expect(htmlOutput.format == .qqHTMLArchive, "QQ HTML 格式")
+            expect(htmlOutput.records.first?.externalURL == "https://example.com", "QQ HTML 链接")
+        } catch {
+            failures.append("QQ HTML 导入：\(error)")
+        }
+
         try? FileManager.default.removeItem(at: repositoryURL)
 
         if failures.isEmpty {
-            print("Domain smoke tests passed: 19/19")
+            print("Domain smoke tests passed: 23/23")
         } else {
             print("Domain smoke tests failed:")
             failures.forEach { print(" - \($0)") }

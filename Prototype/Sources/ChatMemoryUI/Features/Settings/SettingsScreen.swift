@@ -121,6 +121,43 @@ struct SettingsScreen: View {
                     metricCard("标签", "\(store.tags.count)", "tag.fill", .orange)
                 }
 
+                if !store.importBatches.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("最近导入")
+                            .font(.system(size: 14, weight: .heavy))
+                            .foregroundStyle(ChatTheme.primaryText)
+
+                        ForEach(store.importBatches.sorted { $0.importedAt > $1.importedAt }.prefix(3)) { batch in
+                            HStack(spacing: 10) {
+                                IconBadge(
+                                    systemName: "shippingbox.fill",
+                                    tint: batch.format == .wechatSQLite ? .green : .purple,
+                                    size: 32
+                                )
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(batch.format.title) · \(batch.importedCount) 条")
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundStyle(ChatTheme.primaryText)
+                                    Text(batch.fileName)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(ChatTheme.tertiaryText)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+                                Spacer()
+                                Text(Self.relativeFormatter.localizedString(for: batch.importedAt, relativeTo: Date()))
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(ChatTheme.tertiaryText)
+                            }
+                        }
+                    }
+                    .padding(11)
+                    .background(
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .fill(Color.purple.opacity(0.06))
+                    )
+                }
+
                 VStack(alignment: .leading, spacing: 9) {
                     if let json = exportJSON() {
                         ShareLink(
