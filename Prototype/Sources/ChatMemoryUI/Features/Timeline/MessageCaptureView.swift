@@ -64,6 +64,13 @@ struct MessageCaptureView: View {
         ) { result in
             model.selectScanFolder(from: result)
         }
+        .fileImporter(
+            isPresented: $store.isSelectingDecryptedWeChatDirectory,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            model.importDecryptedWechatDirectory(from: result, store: store)
+        }
         .onDisappear {
             model.releaseScanFolderAccess()
         }
@@ -148,6 +155,19 @@ struct MessageCaptureView: View {
                 }
                 .buttonStyle(PressableButtonStyle())
                 .disabled(model.isScanningArchives)
+
+                Button {
+                    store.isSelectingDecryptedWeChatDirectory = true
+                } label: {
+                    Label("解密后的微信目录", systemImage: "lock.open.application")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Capsule(style: .continuous).fill(Color.green))
+                }
+                .buttonStyle(PressableButtonStyle())
+                .disabled(model.isProcessing)
 
                 if model.isProcessing {
                     ProgressView()
@@ -254,6 +274,13 @@ struct MessageCaptureView: View {
                     RoundedRectangle(cornerRadius: 15, style: .continuous)
                         .fill(Color.green.opacity(0.08))
                 )
+            }
+
+            if let summary = model.importSummary {
+                Text(summary)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.green)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -488,6 +515,7 @@ final class MessageCaptureModel: ObservableObject {
     @Published var importOutput: ImportOutput?
     @Published var errorMessage: String?
     @Published var isProcessing = false
+    @Published var importSummary: String?
     @Published var discoveredArchives: [DiscoveredChatArchive] = []
     @Published var scanResult: ChatArchiveScanResult?
     @Published var selectedArchiveID: String?
@@ -680,6 +708,52 @@ final class MessageCaptureModel: ObservableObject {
                 fileName: url.lastPathComponent,
                 format: output.format
             )
+        }
+    }
+
+    @MainActor
+    func importDecryptedWechatDirectory(
+        from result: Result<[URL], Error>,
+        store: ChatStore
+    ) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            let didStartAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccess {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            do {
+                isProcessing = true
+                errorMessage = nil
+                let importer = WechatDecryptedImporter()
+                let directoryImport = try importer.importDirectory(at: url)
+
+                guard !directoryImport.conversations.isEmpty else {
+                    throw ImportError(
+                        message: directoryImport.warnings.joined(separator: "\n").isEmpty
+                            ? "目录中没有解析到微信会话。"
+                            : directoryImport.warnings.joined(separator: "\n")
+                    )
+                }
+
+                let messageCount = directoryImport.conversations.reduce(0) { $0 + $1.messages.count }
+                let batch = store.importWechatDecryptedDirectory(
+                    directoryImport,
+                    fileName: url.lastPathComponent
+                )
+                importSummary = "✅ 解密目录导入完成：\(directoryImport.conversations.count) 个联系人 / \(messageCount) 条消息 / 跳过 \(batch.skippedCount) 条重复"
+            } catch {
+                errorMessage = "导入失败：\(error.localizedDescription)"
+            }
+
+            isProcessing = false
+
+        case .failure(let error):
+            errorMessage = error.localizedDescription
         }
     }
 }

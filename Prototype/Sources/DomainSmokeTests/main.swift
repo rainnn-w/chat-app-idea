@@ -1,5 +1,6 @@
 import Foundation
 import ChatMemoryDomain
+import SQLite3
 
 @main
 enum DomainSmokeTests {
@@ -341,12 +342,94 @@ enum DomainSmokeTests {
             failures.append("开源微信导出 JSON：\(error)")
         }
 
+        let decryptedRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chatmemory-decrypted-\(UUID().uuidString)", isDirectory: true)
+        let decryptedContactURL = decryptedRoot
+            .appendingPathComponent("contact/contact.db")
+        let decryptedMessageURL = decryptedRoot
+            .appendingPathComponent("message/message_0.db")
+        try? FileManager.default.createDirectory(
+            at: decryptedContactURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? FileManager.default.createDirectory(
+            at: decryptedMessageURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        var contactDatabase: OpaquePointer?
+        sqlite3_open(decryptedContactURL.path, &contactDatabase)
+        sqlite3_exec(contactDatabase, "CREATE TABLE contact(username TEXT, nick_name TEXT, remark TEXT, alias TEXT)", nil, nil, nil)
+        sqlite3_exec(contactDatabase, "INSERT INTO contact VALUES('contact_user','小鹿','','')", nil, nil, nil)
+        sqlite3_exec(contactDatabase, "INSERT INTO contact VALUES('wxid_self','我','','')", nil, nil, nil)
+        sqlite3_close(contactDatabase)
+
+        var messageDatabase: OpaquePointer?
+        sqlite3_open(decryptedMessageURL.path, &messageDatabase)
+        sqlite3_exec(messageDatabase, "CREATE TABLE Name2Id(rowid INTEGER PRIMARY KEY, user_name TEXT)", nil, nil, nil)
+        sqlite3_exec(messageDatabase, "INSERT INTO Name2Id(rowid,user_name) VALUES(11,'contact_user')", nil, nil, nil)
+        sqlite3_exec(messageDatabase, "INSERT INTO Name2Id(rowid,user_name) VALUES(12,'wxid_self')", nil, nil, nil)
+        let contactHash = WechatDecryptedImporter.md5Hex("contact_user")
+        sqlite3_exec(
+            messageDatabase,
+            "CREATE TABLE Msg_\(contactHash)(local_id INTEGER, server_id TEXT, local_type INTEGER, create_time INTEGER, real_sender_id INTEGER, message_content TEXT, source TEXT, WCDB_CT_message_content BLOB)",
+            nil,
+            nil,
+            nil
+        )
+        sqlite3_exec(
+            messageDatabase,
+            "INSERT INTO Msg_\(contactHash) VALUES(1,'server-1',1,1800000000,12,'不要香菜','','')",
+            nil,
+            nil,
+            nil
+        )
+        sqlite3_exec(
+            messageDatabase,
+            "INSERT INTO Msg_\(contactHash) VALUES(2,'server-2',1,1800000060,11,'不要花生','','')",
+            nil,
+            nil,
+            nil
+        )
+        sqlite3_close(messageDatabase)
+
+        do {
+            let decryptedImport = try WechatDecryptedImporter().importDirectory(at: decryptedRoot)
+            expect(decryptedImport.selfWxid == "wxid_self", "解密目录自我识别")
+            expect(decryptedImport.conversations.count == 1, "解密目录会话导入")
+            expect(decryptedImport.conversations.first?.messages.count == 2, "解密目录消息导入")
+            expect(
+                decryptedImport.conversations.first?.messages.first?.sourceIdentifier == "wechat-decrypt:message_0.db:Msg_\(contactHash):1",
+                "解密目录来源标识"
+            )
+
+            let decryptedStore = ChatStore(
+                people: [ChatPerson(name: "小鹿", subtitle: "微信 · contact_user")],
+                messages: [],
+                tags: [food],
+                importStatuses: []
+            )
+            let decryptedBatch = decryptedStore.importWechatDecryptedDirectory(
+                decryptedImport,
+                fileName: "decrypted-wechat"
+            )
+            expect(decryptedBatch.importedCount == 2, "解密目录批量导入")
+            expect(decryptedStore.messages.count == 2, "解密目录入库")
+            expect(
+                decryptedStore.messages.first?.sourceIdentifier == "wechat-decrypt:message_0.db:Msg_\(contactHash):1",
+                "解密目录消息来源"
+            )
+        } catch {
+            failures.append("解密微信目录导入：\(error)")
+        }
+
         try? FileManager.default.removeItem(at: scanRoot.deletingLastPathComponent())
+        try? FileManager.default.removeItem(at: decryptedRoot)
 
         try? FileManager.default.removeItem(at: repositoryURL)
 
         if failures.isEmpty {
-            print("Domain smoke tests passed: 33/33")
+            print("Domain smoke tests passed: 39/39")
         } else {
             print("Domain smoke tests failed:")
             failures.forEach { print(" - \($0)") }

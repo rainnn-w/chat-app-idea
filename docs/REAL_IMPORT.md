@@ -38,6 +38,26 @@
 | [Ormicron/chatViewTool](https://github.com/Ormicron/chatViewTool) | Java 图形化微信聊天记录查看工具 |
 | [LC044/WeChatMsg](https://github.com/LC044/WeChatMsg) | 早期“留痕”项目，目前主仓库已停止维护 |
 
+## ChatMemory 支持的解密目录结构
+
+```text
+decrypted/
+  contact/contact.db
+  message/message_0.db
+  message/message_1.db
+  session/session.db
+```
+
+ChatMemory 会读取：
+
+```text
+contact 表：username / nick_name / remark / alias
+Name2Id 表：rowid / user_name
+Msg_<md5(username)> 表：local_id / server_id / local_type / create_time / real_sender_id / message_content
+```
+
+选择目录时，请选择 `decrypted/` 这一层，而不是单独选择某一个 `.db`。
+
 > 注意：涉及微信本地密钥、进程内存或绕过签名的方案请自行评估安全、隐私和服务条款风险。ChatMemory 只导入你已经在本机生成/授权的导出结果。
 
 ## 隐私要求

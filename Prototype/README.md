@@ -13,6 +13,7 @@
  - 0.5.0：自动扫描常见微信目录，候选数据库列表、手动指定微信目录、选中后自动解析
  - 0.6.0：适配开源微信导出 JSON（`chat.json`），支持 timestamp、sender、content、server_id 等字段
  - 0.7.0：Inbox 自动监听导入，成功文件归档、失败文件隔离、目标联系人设置和 macOS Finder 快捷打开
+ - 0.8.0：支持导入已解密的微信 4.x 目录，自动识别联系人、会话、消息发送者和来源 ID
 
 自动扫描只会在你点击按钮后运行，只列出候选 `.db` 文件；不会自动导入、上传或读取消息内容。选中某个候选后才会解析。
 
@@ -67,8 +68,8 @@ cd Prototype
 产物位于：
 
 ```text
-Prototype/dist/ChatMemory-0.7.0-macOS.zip
-Prototype/dist/ChatMemory-0.7.0-macOS.dmg
+Prototype/dist/ChatMemory-0.8.0-macOS.zip
+Prototype/dist/ChatMemory-0.8.0-macOS.dmg
 ```
 
 这个包使用 ad-hoc 签名，未做 Apple Notarization。朋友首次打开时，如果 macOS 提示无法验证开发者，需要右键选择“打开”，或在“系统设置 > 隐私与安全性”里点击“仍要打开”。

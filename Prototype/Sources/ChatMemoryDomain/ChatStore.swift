@@ -19,13 +19,13 @@ public final class ChatStore: ObservableObject {
     @Published public var isShowingDeleteMessageConfirmation = false
     @Published public var isSelectingRecordFile = false
     @Published public var isSelectingWeChatFolder = false
+    @Published public var isSelectingDecryptedWeChatDirectory = false
     @Published public var isShowingJSONImporter = false
     @Published public var isShowingResetConfirmation = false
     @Published public var isShowingSampleConfirmation = false
     @Published public var importError: String?
     @Published public var automationTargetPersonID: UUID?
     @Published public var automationEnabled = true
-    @Published public var isAutomationEnabled = true
     @Published public var automationStatus = "待机"
     @Published public var automationLastError: String?
     @Published public var lastInboxImportAt: Date?
@@ -217,6 +217,111 @@ public final class ChatStore: ObservableObject {
         )
     }
 
+    @discardableResult
+    public func importWechatDecryptedDirectory(
+        _ directoryImport: WechatDecryptedDirectoryImport,
+        fileName: String,
+        now: Date = Date()
+    ) -> ImportBatch {
+        let batchID = UUID()
+        var importedCount = 0
+        var skippedCount = 0
+        var warnings = directoryImport.warnings
+        var existingSourceIDs = Set(messages.compactMap(\.sourceIdentifier))
+        var conversationCounts: [String: Int] = [:]
+
+        for conversation in directoryImport.conversations.sorted(by: { $0.username < $1.username }) {
+            let person = personForWechatConversation(
+                username: conversation.username,
+                displayName: conversation.displayName
+            )
+
+            for message in conversation.messages.sorted(by: { $0.sentAt < $1.sentAt }) {
+                guard !existingSourceIDs.contains(message.sourceIdentifier) else {
+                    skippedCount += 1
+                    continue
+                }
+
+                let sender: MessageSender = message.senderWxid == directoryImport.selfWxid ? .me : .peer
+                let chatMessage = ChatMessage(
+                    personID: person.id,
+                    platform: .wechat,
+                    sender: sender,
+                    sentAt: message.sentAt,
+                    text: message.text,
+                    sourceIdentifier: message.sourceIdentifier,
+                    importBatchID: batchID,
+                    confidence: 0.98
+                )
+
+                messages.append(chatMessage)
+                existingSourceIDs.insert(message.sourceIdentifier)
+                importedCount += 1
+                conversationCounts[conversation.username, default: 0] += 1
+            }
+        }
+
+        markImported(platform: .wechat, at: now)
+
+        if importedCount == 0 {
+            warnings.append("没有新增消息，可能全部为重复数据。")
+        }
+
+        let summary = conversationCounts
+            .sorted { $0.value > $1.value }
+            .prefix(3)
+            .map { "\($0.key)：\($0.value) 条" }
+            .joined(separator: "，")
+
+        if !summary.isEmpty {
+            warnings.append("主要会话：\(summary)")
+        }
+
+        let batch = ImportBatch(
+            id: batchID,
+            fileName: fileName,
+            format: .wechatSQLite,
+            importedCount: importedCount,
+            skippedCount: skippedCount,
+            importedAt: now,
+            warnings: warnings
+        )
+
+        importBatches.append(batch)
+        selectedMessageID = nil
+        selectedPersonID = conversationCounts.max { $0.value < $1.value }
+            .flatMap { entry in
+                people.first { $0.subtitle.contains(entry.key.lowercased()) }?.id
+            } ?? selectedPersonID
+        applySearch()
+        persist()
+        return batch
+    }
+
+    private func personForWechatConversation(
+        username: String,
+        displayName: String
+    ) -> ChatPerson {
+        let normalizedUsername = username.lowercased()
+
+        if let existing = people.first(where: { person in
+            person.subtitle.lowercased().contains(normalizedUsername)
+        }) {
+            return existing
+        }
+
+        if let existing = people.first(where: { $0.name == displayName }) {
+            return existing
+        }
+
+        let person = ChatPerson(
+            name: displayName,
+            subtitle: "微信 · \(username)"
+        )
+        people.append(person)
+        return person
+    }
+
     public static var inboxDirectoryURL: URL {
         let supportDirectory = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
@@ -239,7 +344,7 @@ public final class ChatStore: ObservableObject {
 
     public func startInboxAutomation() {
         guard !inboxAutomationStarted else { return }
-        guard isAutomationEnabled else {
+        guard automationEnabled else {
             automationStatus = "自动导入已关闭"
             return
         }
@@ -289,7 +394,7 @@ public final class ChatStore: ObservableObject {
     }
 
     public func importInboxFiles() {
-        guard isAutomationEnabled, !isInboxImportRunning else { return }
+        guard automationEnabled, !isInboxImportRunning else { return }
         isInboxImportRunning = true
         automationStatus = "正在检查 Inbox"
         prepareInbox()
