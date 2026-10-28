@@ -8,6 +8,7 @@ public enum ImportFormat: String, Codable, Hashable, CaseIterable {
     case xiaohongshuExport
     case douyinExport
     case genericJSON
+    case wechatExportJSON
 
     public var title: String {
         switch self {
@@ -17,6 +18,7 @@ public enum ImportFormat: String, Codable, Hashable, CaseIterable {
         case .xiaohongshuExport: "小红书导出数据"
         case .douyinExport: "抖音导出数据"
         case .genericJSON: "通用聊天 JSON"
+        case .wechatExportJSON: "微信导出 JSON"
         }
     }
 
@@ -34,6 +36,8 @@ public enum ImportFormat: String, Codable, Hashable, CaseIterable {
             "选择抖音账号数据导出的 JSON / NDJSON / HTML 文件。"
         case .genericJSON:
             "选择包含 messages、data、items 或 records 数组的聊天 JSON 文件。"
+        case .wechatExportJSON:
+            "选择开源微信导出工具生成的 chat.json，字段需包含 timestamp、sender、content、server_id。"
         }
     }
 }
@@ -164,6 +168,9 @@ public struct RealChatImporter {
 
         let sample = String(decoding: data.prefix(2_000_000), as: UTF8.self).lowercased()
         if ext == "json" || ext == "ndjson" || sample.hasPrefix("{") || sample.hasPrefix("[") {
+            if sample.contains("\"server_id\"") && sample.contains("\"type_name\"") {
+                return .wechatExportJSON
+            }
             if sample.contains("xiaohongshu") || sample.contains("小红书") || sample.contains("note") {
                 return .xiaohongshuExport
             }
@@ -196,8 +203,13 @@ public struct RealChatImporter {
             throw ImportError(
                 message: "微信数据库已加密（SQLCipher）。ChatMemory 不会读取或推导微信密钥，因此不能直接导入这个文件。"
             )
-        case .genericJSON, .xiaohongshuExport, .douyinExport:
-            return try parseJSON(data: data, url: url, fallbackPlatform: format.fallbackPlatform)
+        case .wechatExportJSON, .genericJSON, .xiaohongshuExport, .douyinExport:
+            return try parseJSON(
+                data: data,
+                url: url,
+                format: format,
+                fallbackPlatform: format.fallbackPlatform
+            )
         case .qqHTMLArchive:
             return parseHTMLArchive(data: data, url: url)
         }
@@ -216,7 +228,12 @@ extension ImportFormat {
 }
 
 private extension RealChatImporter {
-    func parseJSON(data: Data, url: URL, fallbackPlatform: ChatPlatform) throws -> ImportOutput {
+    func parseJSON(
+        data: Data,
+        url: URL,
+        format: ImportFormat,
+        fallbackPlatform: ChatPlatform
+    ) throws -> ImportOutput {
         let text = String(decoding: data, as: UTF8.self)
         var warnings: [String] = []
         var objects: [[String: Any]] = []
@@ -242,7 +259,7 @@ private extension RealChatImporter {
             record(fromObject: $0, fallbackPlatform: fallbackPlatform, sourcePrefix: url.lastPathComponent)
         }
 
-        return ImportOutput(records: records, format: exportFormat(for: fallbackPlatform), warnings: warnings)
+        return ImportOutput(records: records, format: format, warnings: warnings)
     }
 
     func recordStableKey(
@@ -616,7 +633,7 @@ private extension RealChatImporter {
 
         let platformName = stringValue(in: dictionary, keys: ["platform", "source", "app", "channel"]).lowercased()
         let platform = importPlatform(from: platformName, fallback: fallbackPlatform)
-        let sourceID: String? = stringValue(in: dictionary, keys: ["id", "msgId", "msg_id", "messageId", "message_id", "recordId", "record_id"])
+        let sourceID: String? = stringValue(in: dictionary, keys: ["id", "msgId", "msg_id", "messageId", "message_id", "recordId", "record_id", "server_id"])
 
         return RawImportRecord(
             platform: platform,

@@ -27,3 +27,6 @@ Pods/
 
 # Distribution artifacts
 Prototype/dist/
+
+# Local research clones
+Research/

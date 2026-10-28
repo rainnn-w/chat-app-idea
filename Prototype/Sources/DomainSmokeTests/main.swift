@@ -311,12 +311,42 @@ enum DomainSmokeTests {
             expect(!error.localizedDescription.isEmpty, "加密微信数据库错误提示")
         }
 
+        let exportJSONURL = URL(fileURLWithPath: "/tmp/chatmemory-ydotdog.json")
+        let exportJSONData = Data("""
+        [
+          {
+            "time": "2026-10-28 10:00:00",
+            "timestamp": 1792173600,
+            "sender": "小鹿",
+            "type": 1,
+            "type_name": "文本",
+            "content": "不要香菜",
+            "server_id": "server-1001",
+            "db": "message_0.db"
+          }
+        ]
+        """.utf8)
+
+        do {
+            let output = try importer.parse(data: exportJSONData, url: exportJSONURL)
+            expect(output.format == .wechatExportJSON, "开源微信导出格式识别")
+            expect(output.records.count == 1, "开源微信导出 JSON 解析")
+            expect(output.records.first?.text == "不要香菜", "开源微信导出内容")
+            expect(output.records.first?.sender == .peer, "开源微信导出发送者")
+            expect(
+                output.records.first?.sourceIdentifier == "chatmemory-ydotdog.json:server-1001",
+                "开源微信导出来源 ID：\(output.records.first?.sourceIdentifier ?? "nil")"
+            )
+        } catch {
+            failures.append("开源微信导出 JSON：\(error)")
+        }
+
         try? FileManager.default.removeItem(at: scanRoot.deletingLastPathComponent())
 
         try? FileManager.default.removeItem(at: repositoryURL)
 
         if failures.isEmpty {
-            print("Domain smoke tests passed: 28/28")
+            print("Domain smoke tests passed: 33/33")
         } else {
             print("Domain smoke tests failed:")
             failures.forEach { print(" - \($0)") }
