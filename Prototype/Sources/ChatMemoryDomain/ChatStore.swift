@@ -22,6 +22,9 @@ public final class ChatStore: ObservableObject {
     @Published public var searchText = "" {
         didSet { applySearch() }
     }
+    @Published public var searchScope: SearchScope = .currentPerson {
+        didSet { applySearch() }
+    }
     @Published public var selectedPlatforms: Set<ChatPlatform> = Set(ChatPlatform.allCases)
     @Published public private(set) var visibleMessages: [ChatMessage] = []
     public var onDidChange: (() -> Void)?
@@ -57,6 +60,10 @@ public final class ChatStore: ObservableObject {
 
     public var tagDictionary: [UUID: ChatTag] {
         Dictionary(uniqueKeysWithValues: tags.map { ($0.id, $0) })
+    }
+
+    public var personDictionary: [UUID: ChatPerson] {
+        Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
     }
 
     public func select(_ person: ChatPerson?) {
@@ -202,22 +209,31 @@ public final class ChatStore: ObservableObject {
     }
 
     public func applySearch() {
-        let personID = selectedPersonID
-        let query = searchText
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
+        let query = SearchQuery.parse(searchText)
+        let queryPlatforms = query.platforms
         let platforms = selectedPlatforms
+        let personID = selectedPersonID
+        let selectedPeople = searchScope == .currentPerson
+            ? people.filter { $0.id == personID }
+            : people
+        let peopleByID = personDictionary
+        let tagsByID = tagDictionary
 
         visibleMessages = messages
-            .filter { $0.personID == personID }
-            .filter { platforms.contains($0.platform) }
             .filter { message in
-                guard !query.isEmpty else { return true }
-                let tagText = message.tagIDs
-                    .compactMap { tagDictionary[$0]?.name }
-                    .joined(separator: " ")
-                let haystack = "\(message.text) \(tagText) \(message.platform.displayName) \(message.sender.displayName)"
-                return haystack.lowercased().contains(query)
+                guard let person = peopleByID[message.personID] else { return false }
+                return selectedPeople.contains { $0.id == person.id }
+            }
+            .filter { platforms.contains($0.platform) }
+            .filter { queryPlatforms.isEmpty || queryPlatforms.contains($0.platform) }
+            .filter { message in
+                let tagNames = message.tagIDs
+                    .compactMap { tagsByID[$0]?.name }
+                return query.matches(
+                    message: message,
+                    person: peopleByID[message.personID],
+                    tagNames: tagNames
+                )
             }
             .sorted { $0.sentAt > $1.sentAt }
     }

@@ -43,6 +43,19 @@ struct MessageCard: View {
                             .padding(.vertical, 3)
                             .background(Capsule(style: .continuous).fill(message.platform.accent.opacity(0.11)))
 
+                        if store.searchScope == .allPeople,
+                           let person = store.personDictionary[message.personID] {
+                            Text(person.name)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(ChatTheme.secondaryText)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(ChatTheme.secondaryText.opacity(0.10))
+                                )
+                        }
+
                         Spacer(minLength: 8)
 
                         Text(Self.timeFormatter.string(from: message.sentAt))
@@ -68,7 +81,7 @@ struct MessageCard: View {
                                 ForEach(messageTags) { tag in
                                     TagChip(tag: tag) {
                                         withAnimation(ChatTheme.quick) {
-                                            store.searchText = tag.name
+                                            store.searchText = "tag:\(tag.name)"
                                         }
                                     }
                                 }

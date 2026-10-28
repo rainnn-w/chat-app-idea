@@ -53,8 +53,9 @@ struct TagLibraryScreen: View {
 
                 Button {
                     store.select(store.selectedPerson)
+                    store.searchScope = .allPeople
                     withAnimation(ChatTheme.smooth) {
-                        store.searchText = tag.name
+                        store.searchText = "tag:\(tag.name)"
                     }
                     store.selectedSection = .timeline
                 } label: {

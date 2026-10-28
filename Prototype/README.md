@@ -8,6 +8,7 @@
 - 统一视觉语言：渐变主视觉、玻璃卡片、平台颜色、圆角标签、流畅 spring 动画
 - 领域逻辑：联系人、消息、平台筛选、全文搜索、标签、日期分组、收藏
  - 0.2.0：本地 JSON 持久化、联系人创建、单条/多行录入、消息编辑与删除、JSON 导入导出、本地数据清空与示例恢复
+ - 0.3.0：全局搜索、联系人 / 平台 / 标签 / 收藏查询语法、搜索范围切换、跨联系人结果标识
 
 ## 目录
 
@@ -60,8 +61,8 @@ cd Prototype
 产物位于：
 
 ```text
-Prototype/dist/ChatMemory-0.2.0-macOS.zip
-Prototype/dist/ChatMemory-0.2.0-macOS.dmg
+Prototype/dist/ChatMemory-0.3.0-macOS.zip
+Prototype/dist/ChatMemory-0.3.0-macOS.dmg
 ```
 
 这个包使用 ad-hoc 签名，未做 Apple Notarization。朋友首次打开时，如果 macOS 提示无法验证开发者，需要右键选择“打开”，或在“系统设置 > 隐私与安全性”里点击“仍要打开”。

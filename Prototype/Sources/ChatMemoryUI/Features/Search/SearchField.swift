@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SearchField: View {
     @Binding var text: String
-    var prompt = "搜索“不吃香菜”“约定”“旅行”"
+    var prompt = "搜索 香菜 / tag:约定 / person:小鹿 / is:favorite"
     @FocusState private var isFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
 

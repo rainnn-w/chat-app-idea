@@ -16,6 +16,7 @@ enum DomainSmokeTests {
         }
 
         let person = ChatPerson(name: "小鹿", subtitle: "测试联系人")
+        let otherPerson = ChatPerson(name: "沐沐", subtitle: "另一位测试联系人")
         let food = ChatTag(name: "食物爱好", symbolName: "fork.knife", color: .coral)
         let travel = ChatTag(name: "旅行灵感", symbolName: "airplane", color: .sky)
         let now = Date(timeIntervalSince1970: 1_800_000_000)
@@ -44,10 +45,27 @@ enum DomainSmokeTests {
                 sender: .peer,
                 sentAt: now.addingTimeInterval(-180),
                 text: "周五看展取票"
+            ),
+            ChatMessage(
+                personID: otherPerson.id,
+                platform: .xiaohongshu,
+                sender: .peer,
+                sentAt: now.addingTimeInterval(-240),
+                text: "周六想去市集",
+                tagIDs: [travel.id]
+            ),
+            ChatMessage(
+                personID: otherPerson.id,
+                platform: .wechat,
+                sender: .peer,
+                sentAt: now.addingTimeInterval(-300),
+                text: "不要花生",
+                tagIDs: [food.id],
+                isFavorite: true
             )
         ]
         let store = ChatStore(
-            people: [person],
+            people: [person, otherPerson],
             messages: messages,
             tags: [food, travel],
             importStatuses: ChatPlatform.allCases.map {
@@ -57,11 +75,36 @@ enum DomainSmokeTests {
 
         store.searchText = "香菜"
         expect(store.visibleMessages.count == 1, "文本搜索")
-        store.searchText = "旅行"
+        store.searchText = "tag:旅行"
         expect(
             store.visibleMessages.count == 1 && store.visibleMessages[0].platform == .xiaohongshu,
             "标签搜索"
         )
+        store.searchText = ""
+        store.searchScope = .allPeople
+        expect(store.visibleMessages.count == 5, "全局搜索")
+        store.searchText = "不要"
+        expect(
+            store.visibleMessages.count == 2,
+            "全局文本搜索"
+        )
+        store.searchText = "person:沐沐 不要"
+        expect(
+            store.visibleMessages.count == 1 && store.visibleMessages[0].personID == otherPerson.id,
+            "联系人过滤"
+        )
+        store.searchText = "platform:xhs 市集"
+        expect(
+            store.visibleMessages.count == 1 && store.visibleMessages[0].platform == .xiaohongshu,
+            "平台别名过滤"
+        )
+        store.searchText = "is:favorite"
+        expect(
+            store.visibleMessages.count == 1 && store.visibleMessages[0].isFavorite,
+            "收藏过滤"
+        )
+        store.searchText = ""
+        store.searchScope = .currentPerson
         store.searchText = ""
         expect(store.visibleMessages.count == 3, "清空搜索")
 
@@ -165,7 +208,7 @@ enum DomainSmokeTests {
         try? FileManager.default.removeItem(at: repositoryURL)
 
         if failures.isEmpty {
-            print("Domain smoke tests passed: 14/14")
+            print("Domain smoke tests passed: 19/19")
         } else {
             print("Domain smoke tests failed:")
             failures.forEach { print(" - \($0)") }

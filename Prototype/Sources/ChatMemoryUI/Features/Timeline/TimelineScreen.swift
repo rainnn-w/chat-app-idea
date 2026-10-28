@@ -5,6 +5,10 @@ struct TimelineScreen: View {
     @ObservedObject var store: ChatStore
     @Environment(\.colorScheme) private var colorScheme
 
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
+
     private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
@@ -137,7 +141,16 @@ struct TimelineScreen: View {
                 }
             }
 
-            SearchField(text: $store.searchText)
+            searchControls
+
+            if !store.searchText.isEmpty {
+                HStack {
+                    Label("\(store.visibleMessages.count) 条结果", systemImage: "line.3.horizontal.decrease.circle.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(ChatTheme.secondaryText)
+                    Spacer()
+                }
+            }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -159,6 +172,38 @@ struct TimelineScreen: View {
         Set(store.selectedMessages.flatMap(\.tagIDs)).count
     }
 
+    private var searchControls: some View {
+        #if os(iOS)
+        if horizontalSizeClass == .compact {
+            VStack(alignment: .leading, spacing: 8) {
+                SearchField(text: $store.searchText)
+                scopePicker
+            }
+        } else {
+            HStack(spacing: 8) {
+                SearchField(text: $store.searchText)
+                scopePicker
+                    .frame(width: 180)
+            }
+        }
+        #else
+        HStack(spacing: 8) {
+            SearchField(text: $store.searchText)
+            scopePicker
+                .frame(width: 180)
+        }
+        #endif
+    }
+
+    private var scopePicker: some View {
+        Picker("搜索范围", selection: $store.searchScope) {
+            ForEach(SearchScope.allCases) { scope in
+                Text(scope.title).tag(scope)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
     private var emptyState: some View {
         GlassCard {
             VStack(spacing: 13) {
@@ -172,6 +217,7 @@ struct TimelineScreen: View {
                 Button {
                     withAnimation(ChatTheme.smooth) {
                         store.searchText = ""
+                        store.searchScope = .currentPerson
                         store.selectedPlatforms = Set(ChatPlatform.allCases)
                         store.applySearch()
                     }
