@@ -4,11 +4,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="ChatMemory"
 BUNDLE_ID="com.rainnn.chatmemory.prototype.mac"
-VERSION="0.1.0"
+VERSION="0.2.0"
 BUILD_NUMBER="1"
 DIST_DIR="${ROOT}/dist"
 APP_DIR="${DIST_DIR}/${APP_NAME}.app"
 ICONSET_DIR="${DIST_DIR}/AppIcon.iconset"
+DMG_STAGING_DIR="${DIST_DIR}/dmg-root"
 
 cd "${ROOT}"
 
@@ -36,21 +37,28 @@ chmod +x "${APP_DIR}/Contents/MacOS/${APP_NAME}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ${BUNDLE_ID}" "${APP_DIR}/Contents/Info.plist"
 
 echo "▸ Applying ad-hoc code signature"
-codesign --force --sign - "${APP_DIR}"
+codesign --force --options runtime --sign - "${APP_DIR}"
 codesign --verify --strict "${APP_DIR}"
 
 echo "▸ Creating ZIP"
 ditto -c -k --keepParent "${APP_DIR}" "${DIST_DIR}/${APP_NAME}-${VERSION}-macOS.zip"
 
 echo "▸ Creating DMG"
+rm -rf "${DMG_STAGING_DIR}"
+mkdir -p "${DMG_STAGING_DIR}"
+cp -R "${APP_DIR}" "${DMG_STAGING_DIR}/${APP_NAME}.app"
+ln -s /Applications "${DMG_STAGING_DIR}/Applications"
 hdiutil create \
     -volname "${APP_NAME}" \
-    -srcfolder "${APP_DIR}" \
+    -srcfolder "${DMG_STAGING_DIR}" \
     -ov \
     -format UDZO \
     "${DIST_DIR}/${APP_NAME}-${VERSION}-macOS.dmg"
 
+shasum -a 256 "${DIST_DIR}/${APP_NAME}-${VERSION}-macOS.dmg" > "${DIST_DIR}/${APP_NAME}-${VERSION}-macOS.dmg.sha256"
+
 echo "✅ Packaged:"
 echo "   ${DIST_DIR}/${APP_NAME}-${VERSION}-macOS.zip"
 echo "   ${DIST_DIR}/${APP_NAME}-${VERSION}-macOS.dmg"
+echo "   ${DIST_DIR}/${APP_NAME}-${VERSION}-macOS.dmg.sha256"
 

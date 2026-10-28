@@ -2,10 +2,22 @@ import SwiftUI
 import ChatMemoryDomain
 
 public struct AppRootView: View {
-    @StateObject private var store = MockChatData.makeStore()
+    @StateObject private var store: ChatStore
     @Environment(\.colorScheme) private var colorScheme
+    private static let repository = ChatStoreRepository.defaultRepository()
 
-    public init() {}
+    public init() {
+        _store = StateObject(wrappedValue: Self.makeStore())
+    }
+
+    private static func makeStore() -> ChatStore {
+        let store = repository.load(seed: MockChatData.makeStore())
+        store.onDidChange = {
+            try? repository.save(store)
+        }
+        try? repository.save(store)
+        return store
+    }
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -30,10 +42,19 @@ public struct AppRootView: View {
         NavigationSplitView(columnVisibility: .constant(.all)) {
             PersonSidebar(store: store)
         } content: {
-            TimelineScreen(store: store)
-                .navigationTitle(store.selectedPerson?.name ?? "时间线")
+            switch store.selectedSection {
+            case .timeline:
+                TimelineScreen(store: store)
+                    .navigationTitle(store.selectedPerson?.name ?? "时间线")
+            case .tags:
+                TagLibraryScreen(store: store)
+            case .settings:
+                SettingsScreen(store: store)
+            }
         } detail: {
-            if let message = store.selectedMessage {
+            if store.selectedSection != .timeline {
+                sectionDetailPlaceholder
+            } else if let message = store.selectedMessage {
                 MessageInspector(store: store, message: message)
             } else {
                 inspectorPlaceholder
@@ -44,7 +65,7 @@ public struct AppRootView: View {
 
     #if os(iOS)
     private var compactLayout: some View {
-        TabView {
+        TabView(selection: compactSectionBinding) {
             NavigationStack {
                 TimelineScreen(store: store)
                     .navigationTitle(store.selectedPerson?.name ?? "时间线")
@@ -62,6 +83,7 @@ public struct AppRootView: View {
                         }
                 }
             }
+            .tag(AppSection.timeline)
             .tabItem {
                 Label("时间线", systemImage: "bubble.left.and.bubble.right.fill")
             }
@@ -69,6 +91,7 @@ public struct AppRootView: View {
             NavigationStack {
                 TagLibraryScreen(store: store)
             }
+            .tag(AppSection.tags)
             .tabItem {
                 Label("标签", systemImage: "tag.fill")
             }
@@ -83,6 +106,7 @@ public struct AppRootView: View {
             NavigationStack {
                 SettingsScreen(store: store)
             }
+            .tag(AppSection.settings)
             .tabItem {
                 Label("设置", systemImage: "gearshape.fill")
             }
@@ -116,6 +140,36 @@ public struct AppRootView: View {
                 }
             }
         )
+    }
+
+    private var compactSectionBinding: Binding<AppSection> {
+        Binding(
+            get: { store.selectedSection },
+            set: { section in
+                store.selectedSection = section
+            }
+        )
+    }
+
+    private var sectionDetailPlaceholder: some View {
+        VStack(spacing: 12) {
+            IconBadge(
+                systemName: store.selectedSection.symbolName,
+                tint: .purple,
+                size: 48
+            )
+            Text(store.selectedSection.title)
+                .font(.system(size: 18, weight: .heavy))
+                .foregroundStyle(ChatTheme.primaryText)
+            Text("请在左侧调整筛选，或在中间区域管理内容。")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(ChatTheme.secondaryText)
+                .multilineTextAlignment(.center)
+        }
+        .padding(24)
+        .frame(maxWidth: 420)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(ChatTheme.canvasGradient(for: colorScheme).ignoresSafeArea())
     }
 }
 

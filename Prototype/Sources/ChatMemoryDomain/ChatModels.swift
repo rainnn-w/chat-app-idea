@@ -37,7 +37,7 @@ public enum ChatPlatform: String, CaseIterable, Codable, Hashable, Identifiable 
 
 }
 
-public enum MessageSender: String, Codable, Hashable {
+public enum MessageSender: String, CaseIterable, Codable, Hashable {
     case me
     case peer
     case system
@@ -51,7 +51,7 @@ public enum MessageSender: String, Codable, Hashable {
     }
 }
 
-public struct ChatPerson: Identifiable {
+public struct ChatPerson: Identifiable, Codable, Hashable {
     public var id: UUID
     public var name: String
     public var subtitle: String
@@ -95,6 +95,30 @@ public enum TagColor: String, CaseIterable, Codable, Hashable {
     case lavender
     case honey
     case sky
+}
+
+public enum AppSection: String, CaseIterable, Identifiable, Hashable {
+    case timeline
+    case tags
+    case settings
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .timeline: "时间线"
+        case .tags: "标签"
+        case .settings: "设置"
+        }
+    }
+
+    public var symbolName: String {
+        switch self {
+        case .timeline: "bubble.left.and.bubble.right.fill"
+        case .tags: "tag.fill"
+        case .settings: "gearshape.fill"
+        }
+    }
 }
 
 public struct ChatMessage: Identifiable, Hashable, Codable {

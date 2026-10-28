@@ -68,6 +68,11 @@ enum ChatTheme {
     static let tertiaryText = Color.secondary.opacity(0.75)
     static let cardBorder = Color.black.opacity(0.06)
     static let softShadow = Color.black.opacity(0.08)
+    static let disabledGradient = LinearGradient(
+        colors: [Color.secondary.opacity(0.35), Color.secondary.opacity(0.35)],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
 
     static func color(for platform: ChatPlatform) -> Color {
         switch platform {

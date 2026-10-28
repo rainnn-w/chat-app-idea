@@ -10,11 +10,21 @@ public final class ChatStore: ObservableObject {
     @Published public var selectedMessageID: UUID?
     @Published public var hoveringMessageID: UUID?
     @Published public var isRefreshing = false
+    @Published public var selectedSection: AppSection = .timeline
+    @Published public var isShowingCaptureSheet = false
+    @Published public var isShowingPersonEditorSheet = false
+    @Published public var isShowingMessageEditorSheet = false
+    @Published public var isShowingDeleteMessageConfirmation = false
+    @Published public var isShowingJSONImporter = false
+    @Published public var isShowingResetConfirmation = false
+    @Published public var isShowingSampleConfirmation = false
+    @Published public var importError: String?
     @Published public var searchText = "" {
         didSet { applySearch() }
     }
     @Published public var selectedPlatforms: Set<ChatPlatform> = Set(ChatPlatform.allCases)
     @Published public private(set) var visibleMessages: [ChatMessage] = []
+    public var onDidChange: (() -> Void)?
 
     public init(
         people: [ChatPerson],
@@ -69,6 +79,8 @@ public final class ChatStore: ObservableObject {
     public func toggleFavorite(_ message: ChatMessage) {
         guard let index = messages.firstIndex(where: { $0.id == message.id }) else { return }
         messages[index].isFavorite.toggle()
+        applySearch()
+        persist()
     }
 
     public func toggleTag(_ tag: ChatTag, on message: ChatMessage) {
@@ -77,6 +89,104 @@ public final class ChatStore: ObservableObject {
             messages[index].tagIDs.remove(tag.id)
         } else {
             messages[index].tagIDs.insert(tag.id)
+        }
+        applySearch()
+        persist()
+    }
+
+    public func addPerson(name: String, subtitle: String) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+
+        let person = ChatPerson(
+            name: trimmedName,
+            subtitle: subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+
+        people.append(person)
+        select(person)
+        persist()
+    }
+
+    public func addMessage(
+        personID: UUID? = nil,
+        platform: ChatPlatform,
+        sender: MessageSender,
+        sentAt: Date = Date(),
+        text: String,
+        externalTitle: String? = nil,
+        externalURL: String? = nil,
+        tagIDs: Set<UUID> = []
+    ) {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+
+        guard let targetPersonID = personID ?? selectedPersonID,
+              people.contains(where: { $0.id == targetPersonID }) else { return }
+
+        let message = ChatMessage(
+            personID: targetPersonID,
+            platform: platform,
+            sender: sender,
+            sentAt: sentAt,
+            text: trimmedText,
+            externalTitle: externalTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            externalURL: externalURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            tagIDs: tagIDs
+        )
+
+        messages.append(message)
+        markImported(platform: platform)
+        applySearch()
+        persist()
+    }
+
+    public func updateMessage(_ message: ChatMessage) {
+        guard let index = messages.firstIndex(where: { $0.id == message.id }) else { return }
+        messages[index] = message
+        applySearch()
+        persist()
+    }
+
+    public func deleteMessage(id: UUID) {
+        messages.removeAll { $0.id == id }
+        if selectedMessageID == id {
+            selectedMessageID = nil
+        }
+        applySearch()
+        persist()
+    }
+
+    public func replace(with snapshot: ChatStoreSnapshot) {
+        people = snapshot.people
+        messages = snapshot.messages
+        tags = snapshot.tags
+        importStatuses = snapshot.importStatuses
+        selectedPersonID = people.first?.id
+        selectedMessageID = nil
+        selectedPlatforms = Set(ChatPlatform.allCases)
+        searchText = ""
+        applySearch()
+        persist()
+    }
+
+    public func makeSnapshot() -> ChatStoreSnapshot {
+        ChatStoreSnapshot(
+            people: people,
+            messages: messages,
+            tags: tags,
+            importStatuses: importStatuses
+        )
+    }
+
+    public func markImported(platform: ChatPlatform, at date: Date = Date()) {
+        if let index = importStatuses.firstIndex(where: { $0.platform == platform }) {
+            importStatuses[index].lastUpdated = date
+            importStatuses[index].state = .fresh
+        } else {
+            importStatuses.append(
+                ImportStatus(platform: platform, lastUpdated: date, state: .fresh)
+            )
         }
     }
 
@@ -110,6 +220,16 @@ public final class ChatStore: ObservableObject {
                 return haystack.lowercased().contains(query)
             }
             .sorted { $0.sentAt > $1.sentAt }
+    }
+
+    private func persist() {
+        onDidChange?()
+    }
+}
+
+extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }
 

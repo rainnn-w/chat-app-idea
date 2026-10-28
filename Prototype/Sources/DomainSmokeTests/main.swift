@@ -100,8 +100,72 @@ enum DomainSmokeTests {
             failures.append("测试数据缺失")
         }
 
+        let repositoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chat-memory-smoke-\(UUID().uuidString).json")
+        let repository = ChatStoreRepository(fileURL: repositoryURL)
+        var persistenceError: String?
+
+        store.onDidChange = {
+            do {
+                try repository.save(store)
+            } catch {
+                persistenceError = "\(error)"
+            }
+        }
+
+        store.addPerson(name: "沐沐", subtitle: "持久化测试")
+        expect(
+            Dictionary(grouping: store.importStatuses, by: \.platform)
+                .values.allSatisfy { $0.count == 1 },
+            "联系人创建不重复平台状态"
+        )
+        store.addMessage(
+            platform: .douyin,
+            sender: .me,
+            text: "这是一条需要持久化的消息"
+        )
+        store.updateMessage(
+            ChatMessage(
+                id: messages[0].id,
+                personID: person.id,
+                platform: .wechat,
+                sender: .peer,
+                sentAt: messages[0].sentAt,
+                text: "更新后的消息",
+                tagIDs: [food.id]
+            )
+        )
+
+        expect(persistenceError == nil, "JSON 写入")
+
+        let restored = repository.load(seed: ChatStore(
+            people: [],
+            messages: [],
+            tags: [],
+            importStatuses: []
+        ))
+        expect(restored.people.contains { $0.name == "沐沐" }, "联系人恢复")
+        expect(
+            restored.messages.contains { $0.text == "这是一条需要持久化的消息" },
+            "消息恢复"
+        )
+        expect(
+            restored.messages.first { $0.id == messages[0].id }?.text == "更新后的消息",
+            "消息更新恢复"
+        )
+
+        if let messageID = restored.messages.first(where: { $0.text == "这是一条需要持久化的消息" })?.id {
+            restored.deleteMessage(id: messageID)
+            expect(
+                !restored.messages.contains { $0.id == messageID },
+                "消息删除"
+            )
+        }
+
+        try? FileManager.default.removeItem(at: repositoryURL)
+
         if failures.isEmpty {
-            print("Domain smoke tests passed: 8/8")
+            print("Domain smoke tests passed: 14/14")
         } else {
             print("Domain smoke tests failed:")
             failures.forEach { print(" - \($0)") }

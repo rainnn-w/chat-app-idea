@@ -54,6 +54,9 @@ struct TimelineScreen: View {
             }
         }
         .animation(ChatTheme.smooth, value: store.visibleMessages)
+        .sheet(isPresented: $store.isShowingCaptureSheet) {
+            MessageCaptureView(store: store)
+        }
     }
 
     private var header: some View {
@@ -96,9 +99,9 @@ struct TimelineScreen: View {
                             Spacer(minLength: 12)
 
                             Button {
-                                // TODO: 接入 Raw Inbox 后替换为真实导入动作。
+                                store.isShowingCaptureSheet = true
                             } label: {
-                                Label(store.isRefreshing ? "更新中" : "更新", systemImage: "arrow.triangle.2.circlepath")
+                                Label("录入", systemImage: "plus.circle.fill")
                                     .font(.system(size: 13, weight: .bold))
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, 13)
@@ -106,6 +109,7 @@ struct TimelineScreen: View {
                                     .background(Capsule(style: .continuous).fill(.white.opacity(0.20)))
                             }
                             .buttonStyle(PressableButtonStyle())
+                            .keyboardShortcut("n", modifiers: .command)
                         }
 
                         HStack(spacing: 8) {

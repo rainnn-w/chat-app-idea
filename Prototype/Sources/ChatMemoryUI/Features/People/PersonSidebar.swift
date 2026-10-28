@@ -19,28 +19,59 @@ struct PersonSidebar: View {
                 Spacer()
             }
 
-            ScrollView {
-                VStack(spacing: 9) {
-                    ForEach(store.people) { person in
-                        personButton(person)
-                    }
-
-                    Button {
-                        // TODO: 建立联系人创建流程。
-                    } label: {
-                        Label("添加联系人", systemImage: "plus.circle.fill")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 11)
-                            .background(
-                                RoundedRectangle(cornerRadius: 17, style: .continuous)
-                                    .fill(ChatTheme.heroGradient)
-                            )
-                    }
-                    .buttonStyle(PressableButtonStyle())
+            Picker("模块", selection: $store.selectedSection) {
+                ForEach(AppSection.allCases) { section in
+                    Label(section.title, systemImage: section.symbolName)
+                        .tag(section)
                 }
             }
+            .pickerStyle(.segmented)
+
+            ScrollView {
+                VStack(spacing: 9) {
+                    if store.selectedSection == .timeline {
+                        ForEach(store.people) { person in
+                            personButton(person)
+                        }
+
+                        Button {
+                            store.isShowingPersonEditorSheet = true
+                        } label: {
+                            Label("添加联系人", systemImage: "plus.circle.fill")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 11)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                        .fill(ChatTheme.heroGradient)
+                                )
+                        }
+                        .buttonStyle(PressableButtonStyle())
+                    } else {
+                        GlassCard(cornerRadius: 20) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                IconBadge(
+                                    systemName: store.selectedSection.symbolName,
+                                    tint: .purple,
+                                    size: 34
+                                )
+                                Text(store.selectedSection.title)
+                                    .font(.system(size: 15, weight: .heavy))
+                                Text(store.selectedSection == .tags ? "按标签回顾偏好、约定和待办。" : "管理本地数据、备份和隐私说明。")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(ChatTheme.secondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(13)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $store.isShowingPersonEditorSheet) {
+            PersonEditorView(store: store)
         }
         .padding(13)
         .frame(minWidth: 245)

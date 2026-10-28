@@ -56,6 +56,7 @@ struct TagLibraryScreen: View {
                     withAnimation(ChatTheme.smooth) {
                         store.searchText = tag.name
                     }
+                    store.selectedSection = .timeline
                 } label: {
                     Label("查看标签结果", systemImage: "arrow.right.circle.fill")
                         .font(.system(size: 12, weight: .bold))
