@@ -47,7 +47,7 @@ struct MessageCaptureView: View {
             }
         }
         .padding(20)
-        .frame(width: 580, height: model.mode == .single ? 590 : 650)
+        .frame(width: 620, height: model.mode == .single ? 590 : (model.scanResult?.hasResults == true ? 820 : 700))
         .background(ChatTheme.canvasGradient(for: colorScheme))
         .animation(ChatTheme.smooth, value: model.mode)
         .fileImporter(
@@ -56,6 +56,16 @@ struct MessageCaptureView: View {
             allowsMultipleSelection: false
         ) { result in
             model.selectFile(from: result)
+        }
+        .fileImporter(
+            isPresented: $store.isSelectingWeChatFolder,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            model.selectScanFolder(from: result)
+        }
+        .onDisappear {
+            model.releaseScanFolderAccess()
         }
     }
 
@@ -111,12 +121,54 @@ struct MessageCaptureView: View {
                 }
                 .buttonStyle(PressableButtonStyle())
 
+                Button {
+                    Task { await model.scanWeChatLocations() }
+                } label: {
+                    Label("自动扫描微信", systemImage: "magnifyingglass")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Capsule(style: .continuous).fill(Color.blue))
+                }
+                .buttonStyle(PressableButtonStyle())
+                .disabled(model.isScanningArchives)
+
+                Button {
+                    store.isSelectingWeChatFolder = true
+                } label: {
+                    Label("选择微信目录", systemImage: "folder")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.blue)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(
+                            Capsule(style: .continuous).fill(Color.blue.opacity(0.10))
+                        )
+                }
+                .buttonStyle(PressableButtonStyle())
+                .disabled(model.isScanningArchives)
+
                 if model.isProcessing {
                     ProgressView()
                         .controlSize(.small)
                 }
 
                 Spacer()
+            }
+
+            if model.isScanningArchives {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("正在扫描常见微信目录…")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(ChatTheme.secondaryText)
+                }
+            }
+
+            if let scanResult = model.scanResult {
+                candidateList(scanResult)
             }
 
             if let fileName = model.selectedFileName {
@@ -204,6 +256,97 @@ struct MessageCaptureView: View {
                 )
             }
         }
+    }
+
+    private func candidateList(_ result: ChatArchiveScanResult) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label(
+                    result.hasResults ? "发现 \(result.archives.count) 个候选数据库" : "未发现候选数据库",
+                    systemImage: result.hasResults ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"
+                )
+                .font(.system(size: 13, weight: .heavy))
+                .foregroundStyle(result.hasResults ? .green : .orange)
+
+                Spacer()
+                Text("已扫描 \(result.scannedDirectories) 个目录")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(ChatTheme.tertiaryText)
+            }
+
+            ScrollView {
+                VStack(spacing: 7) {
+                    ForEach(result.archives) { archive in
+                        Button {
+                            model.select(archive)
+                        } label: {
+                            HStack(spacing: 10) {
+                                IconBadge(
+                                    systemName: "cylinder.split.1x2.fill",
+                                    tint: model.selectedArchiveID == archive.id ? .purple : .green,
+                                    size: 32
+                                )
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(archive.fileName)
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundStyle(ChatTheme.primaryText)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                    Text(archive.relativePath)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(ChatTheme.tertiaryText)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+
+                                Spacer()
+
+                                VStack(alignment: .trailing, spacing: 3) {
+                                    Text(archive.formattedSize)
+                                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    Text(archive.reason)
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(ChatTheme.tertiaryText)
+                                }
+                            }
+                            .padding(9)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(
+                                        model.selectedArchiveID == archive.id
+                                            ? Color.purple.opacity(0.12)
+                                            : ChatTheme.surface(for: colorScheme)
+                                    )
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(
+                                        model.selectedArchiveID == archive.id
+                                            ? Color.purple.opacity(0.25)
+                                            : Color.clear,
+                                        lineWidth: 1
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .frame(maxHeight: 165)
+
+            ForEach(result.warnings, id: \.self) { warning in
+                Label(warning, systemImage: "info.circle.fill")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.blue.opacity(0.06))
+        )
     }
 
     private var saveButton: some View {
@@ -337,6 +480,13 @@ final class MessageCaptureModel: ObservableObject {
     @Published var importOutput: ImportOutput?
     @Published var errorMessage: String?
     @Published var isProcessing = false
+    @Published var discoveredArchives: [DiscoveredChatArchive] = []
+    @Published var scanResult: ChatArchiveScanResult?
+    @Published var selectedArchiveID: String?
+    @Published var isScanningArchives = false
+    @Published var scanErrorMessage: String?
+    var scanFolderAccessURL: URL?
+    var didStartScanFolderAccess = false
 
     enum CaptureMode: String, CaseIterable, Identifiable {
         case single
@@ -406,6 +556,95 @@ final class MessageCaptureModel: ObservableObject {
         case .failure(let error):
             errorMessage = error.localizedDescription
         }
+    }
+
+    @MainActor
+    func scanWeChatLocations() {
+        guard !isScanningArchives else { return }
+        isScanningArchives = true
+        scanErrorMessage = nil
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let result = ChatArchiveScanner().scanWeChatLocations()
+            await MainActor.run {
+                self?.scanResult = result
+                self?.discoveredArchives = result.archives
+                self?.isScanningArchives = false
+            }
+        }
+    }
+
+    @MainActor
+    func selectScanFolder(from result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            releaseScanFolderAccess()
+            let didStartAccess = url.startAccessingSecurityScopedResource()
+            scanFolderAccessURL = url
+            didStartScanFolderAccess = didStartAccess
+            scanDirectories(at: url)
+
+        case .failure(let error):
+            scanErrorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    func scanDirectories(at url: URL) {
+        guard !isScanningArchives else { return }
+        isScanningArchives = true
+        scanErrorMessage = nil
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let result = ChatArchiveScanner().scanDirectories(
+                at: [url],
+                platform: .wechat,
+                format: .wechatSQLite
+            )
+            await MainActor.run {
+                self?.scanResult = result
+                self?.discoveredArchives = result.archives
+                self?.isScanningArchives = false
+            }
+        }
+    }
+
+    @MainActor
+    func select(_ archive: DiscoveredChatArchive) {
+        selectedArchiveID = archive.id
+        loadArchive(at: archive.url)
+    }
+
+    @MainActor
+    private func loadArchive(at url: URL) {
+        do {
+            let data = try Data(contentsOf: url)
+            errorMessage = nil
+            selectedFileURL = url
+            selectedFileName = url.lastPathComponent
+            selectedFileData = data
+
+            let importer = RealChatImporter()
+            let output = try importer.parse(data: data, url: url)
+            detectedFormat = output.format
+            importOutput = output
+        } catch {
+            selectedFileURL = nil
+            selectedFileName = nil
+            selectedFileData = nil
+            detectedFormat = nil
+            importOutput = nil
+            errorMessage = "读取失败：\(error.localizedDescription)"
+        }
+    }
+
+    func releaseScanFolderAccess() {
+        if didStartScanFolderAccess, let scanFolderAccessURL {
+            scanFolderAccessURL.stopAccessingSecurityScopedResource()
+        }
+        scanFolderAccessURL = nil
+        didStartScanFolderAccess = false
     }
 
     func save(to store: ChatStore) {

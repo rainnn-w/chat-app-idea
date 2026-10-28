@@ -274,10 +274,34 @@ enum DomainSmokeTests {
             failures.append("QQ HTML 导入：\(error)")
         }
 
+        let scanRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chatmemory-scan-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("Message", isDirectory: true)
+        try? FileManager.default.createDirectory(at: scanRoot, withIntermediateDirectories: true)
+        try? Data("SQLite format 3\0fixture".utf8).write(to: scanRoot.appendingPathComponent("Chat_test.db"))
+        try? Data("not a database".utf8).write(to: scanRoot.appendingPathComponent("notes.txt"))
+
+        let scanResult = ChatArchiveScanner().scanDirectories(
+            at: [scanRoot.deletingLastPathComponent()],
+            platform: .wechat,
+            format: .wechatSQLite
+        )
+        expect(scanResult.archives.count == 1, "微信数据库扫描")
+        expect(
+            scanResult.archives.first?.fileName == "Chat_test.db",
+            "微信扫描文件名"
+        )
+        expect(
+            scanResult.archives.first?.reason == "微信 Message 目录",
+            "微信扫描目录：\(scanResult.archives.first?.reason ?? "nil") / \(scanResult.archives.first?.relativePath ?? "nil")"
+        )
+
+        try? FileManager.default.removeItem(at: scanRoot.deletingLastPathComponent())
+
         try? FileManager.default.removeItem(at: repositoryURL)
 
         if failures.isEmpty {
-            print("Domain smoke tests passed: 23/23")
+            print("Domain smoke tests passed: 26/26")
         } else {
             print("Domain smoke tests failed:")
             failures.forEach { print(" - \($0)") }

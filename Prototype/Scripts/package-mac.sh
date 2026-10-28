@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="ChatMemory"
 BUNDLE_ID="com.rainnn.chatmemory.prototype.mac"
-VERSION="0.4.0"
+VERSION="0.5.0"
 BUILD_NUMBER="1"
 DIST_DIR="${ROOT}/dist"
 APP_DIR="${DIST_DIR}/${APP_NAME}.app"

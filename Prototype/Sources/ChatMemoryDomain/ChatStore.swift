@@ -17,6 +17,7 @@ public final class ChatStore: ObservableObject {
     @Published public var isShowingMessageEditorSheet = false
     @Published public var isShowingDeleteMessageConfirmation = false
     @Published public var isSelectingRecordFile = false
+    @Published public var isSelectingWeChatFolder = false
     @Published public var isShowingJSONImporter = false
     @Published public var isShowingResetConfirmation = false
     @Published public var isShowingSampleConfirmation = false
