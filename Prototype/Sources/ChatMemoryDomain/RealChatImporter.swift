@@ -9,6 +9,8 @@ public enum ImportFormat: String, Codable, Hashable, CaseIterable {
     case douyinExport
     case genericJSON
     case wechatExportJSON
+    case chatLab
+    case douyinArchive
 
     public var title: String {
         switch self {
@@ -19,6 +21,8 @@ public enum ImportFormat: String, Codable, Hashable, CaseIterable {
         case .douyinExport: "抖音导出数据"
         case .genericJSON: "通用聊天 JSON"
         case .wechatExportJSON: "微信导出 JSON"
+        case .chatLab: "ChatLab 聊天归档"
+        case .douyinArchive: "抖音数据导出"
         }
     }
 
@@ -38,6 +42,10 @@ public enum ImportFormat: String, Codable, Hashable, CaseIterable {
             "选择包含 messages、data、items 或 records 数组的聊天 JSON 文件。"
         case .wechatExportJSON:
             "选择开源微信导出工具生成的 chat.json，字段需包含 timestamp、sender、content、server_id。"
+        case .chatLab:
+            "选择 ChatLab v0.0.2 的 JSON/JSONL，可用于 QQ（WeQ）、小红书等导出结果。"
+        case .douyinArchive:
+            "选择抖音数据导出的 JSON，需包含 chatMessages / chatConversations。"
         }
     }
 }
@@ -168,6 +176,13 @@ public struct RealChatImporter {
 
         let sample = String(decoding: data.prefix(2_000_000), as: UTF8.self).lowercased()
         if ext == "json" || ext == "ndjson" || sample.hasPrefix("{") || sample.hasPrefix("[") {
+            let compactSample = sample.replacingOccurrences(of: "\\s+", with: "", options: .regularExpression)
+            if sample.contains("\"chatlab\"") && sample.contains("\"members\"") && sample.contains("\"messages\"") {
+                return .chatLab
+            }
+            if compactSample.contains("\"schemaversion\":2") && sample.contains("\"chatmessages\"") {
+                return .douyinArchive
+            }
             if sample.contains("\"server_id\"") && sample.contains("\"type_name\"") {
                 return .wechatExportJSON
             }
@@ -209,6 +224,15 @@ public struct RealChatImporter {
                 url: url,
                 format: format,
                 fallbackPlatform: format.fallbackPlatform
+            )
+        case .chatLab:
+            return try parseChatLab(data: data, url: url)
+        case .douyinArchive:
+            return try parseJSON(
+                data: data,
+                url: url,
+                format: format,
+                fallbackPlatform: .douyin
             )
         case .qqHTMLArchive:
             return parseHTMLArchive(data: data, url: url)
@@ -260,6 +284,106 @@ private extension RealChatImporter {
         }
 
         return ImportOutput(records: records, format: format, warnings: warnings)
+    }
+
+    func parseChatLab(data: Data, url: URL) throws -> ImportOutput {
+        var warnings: [String] = []
+        var records: [RawImportRecord] = []
+        var members: [String: String] = [:]
+        var platform = ChatPlatform.qq
+
+        if let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let meta = root["meta"] as? [String: Any] {
+                platform = importPlatform(
+                    from: stringValue(in: meta, keys: ["platform", "source", "app"]),
+                    fallback: .qq
+                )
+            }
+
+            let memberList = root["members"] as? [[String: Any]] ?? []
+            for member in memberList {
+                let platformID = stringValue(in: member, keys: ["platformId", "platform_id"])
+                let accountName = stringValue(in: member, keys: ["accountName", "account_name"])
+                guard !platformID.isEmpty else { continue }
+                members[platformID] = accountName
+            }
+
+            let messageList = root["messages"] as? [[String: Any]] ?? []
+            for message in messageList {
+                let senderID = stringValue(in: message, keys: ["sender"])
+                let accountName = stringValue(in: message, keys: ["accountName", "account_name", "groupNickname"])
+                let timestamp = numberValue(in: message, keys: ["timestamp"]) ?? 0
+                let content = stringValue(in: message, keys: ["content"])
+                let messageID = stringValue(in: message, keys: ["platformMessageId", "platform_message_id"])
+                guard !messageID.isEmpty, timestamp > 0 else { continue }
+
+                let senderName = members[senderID] ?? accountName
+                let sender: MessageSender = senderName == "我" || senderID.lowercased().contains("self")
+                    ? .me
+                    : .peer
+
+                records.append(
+                    RawImportRecord(
+                        platform: platform,
+                        sender: sender,
+                        sentAt: date(fromUnix: timestamp),
+                        text: content,
+                        externalTitle: nil,
+                        externalURL: firstHTTPURL(content)?.absoluteString,
+                        sourceIdentifier: "chatlab:\(url.lastPathComponent):\(messageID)",
+                        confidence: 0.97
+                    )
+                )
+            }
+        } else {
+            warnings.append("ChatLab JSON 无法解析，将尝试按 JSONL 处理。")
+        }
+
+        if records.isEmpty {
+            let text = String(decoding: data, as: UTF8.self)
+            for line in text.components(separatedBy: .newlines) {
+                guard let lineData = line.data(using: .utf8),
+                      let object = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                      stringValue(in: object, keys: ["_type"]) == "message" else {
+                    continue
+                }
+
+                let senderID = stringValue(in: object, keys: ["sender"])
+                let accountName = stringValue(in: object, keys: ["accountName", "account_name", "groupNickname"])
+                let timestamp = numberValue(in: object, keys: ["timestamp"]) ?? 0
+                let content = stringValue(in: object, keys: ["content"])
+                let messageID = stringValue(in: object, keys: ["platformMessageId", "platform_message_id"])
+                guard !messageID.isEmpty, timestamp > 0 else { continue }
+
+                let senderName = members[senderID] ?? accountName
+                let sender: MessageSender = senderName == "我" || senderID.lowercased().contains("self")
+                    ? .me
+                    : .peer
+
+                records.append(
+                    RawImportRecord(
+                        platform: platform,
+                        sender: sender,
+                        sentAt: date(fromUnix: timestamp),
+                        text: content,
+                        externalTitle: nil,
+                        externalURL: firstHTTPURL(content)?.absoluteString,
+                        sourceIdentifier: "chatlab:\(url.lastPathComponent):\(messageID)",
+                        confidence: 0.97
+                    )
+                )
+            }
+
+            if records.isEmpty {
+                warnings.append("ChatLab 文件中没有可导入的消息。")
+            }
+        }
+
+        return ImportOutput(
+            records: records.sorted { $0.sentAt < $1.sentAt },
+            format: .chatLab,
+            warnings: warnings
+        )
     }
 
     func recordStableKey(

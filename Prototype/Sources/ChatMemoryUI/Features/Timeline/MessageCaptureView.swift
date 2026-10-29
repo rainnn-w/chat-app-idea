@@ -230,6 +230,8 @@ struct MessageCaptureView: View {
                     supportedFormatRow("QQ", ".mht / .html 网页归档")
                     supportedFormatRow("小红书", "账号导出 JSON / NDJSON / HTML")
                     supportedFormatRow("抖音", "账号导出 JSON / NDJSON / HTML")
+                    supportedFormatRow("QQ / 小红书", "ChatLab JSON / JSONL")
+                    supportedFormatRow("抖音", "数据导出 JSON")
                     supportedFormatRow("通用", "messages / data / items / records JSON")
                 }
             }

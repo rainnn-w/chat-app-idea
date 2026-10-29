@@ -423,13 +423,79 @@ enum DomainSmokeTests {
             failures.append("解密微信目录导入：\(error)")
         }
 
+        let xhsChatLabData = Data("""
+        {
+          "chatlab": { "version": "0.0.2", "exportedAt": 1800000000, "generator": "xhs-chatlab-exporter" },
+          "meta": { "name": "示例私聊", "platform": "xiaohongshu", "type": "private" },
+          "members": [
+            { "platformId": "self-xhs", "accountName": "我" },
+            { "platformId": "peer-xhs", "accountName": "示例联系人" }
+          ],
+          "messages": [
+            {
+              "platformMessageId": "xhs-001",
+              "sender": "peer-xhs",
+              "accountName": "示例联系人",
+              "timestamp": 1800000000,
+              "type": 0,
+              "content": "小红书测试消息"
+            }
+          ]
+        }
+        """.utf8)
+
+        do {
+            let output = try importer.parse(data: xhsChatLabData, url: URL(fileURLWithPath: "/tmp/xhs.chatlab.json"))
+            expect(output.format == .chatLab, "小红书 ChatLab 识别")
+            expect(output.records.count == 1, "小红书 ChatLab 解析")
+            expect(output.records.first?.platform == .xiaohongshu, "小红书 ChatLab 平台")
+            expect(output.records.first?.text == "小红书测试消息", "小红书 ChatLab 内容")
+        } catch {
+            failures.append("小红书 ChatLab 导入：\(error)")
+        }
+
+        let douyinData = Data("""
+        {
+          "schemaVersion": 2,
+          "chatConversations": [
+            { "id": "conv-douyin", "kind": "friend", "name": "抖音好友", "messageCount": 1 }
+          ],
+          "chatMessages": [
+            {
+              "id": "douyin-001",
+              "conversationId": "conv-douyin",
+              "conversationType": "friend",
+              "conversationName": "抖音好友",
+              "senderId": "peer",
+              "senderName": "抖音好友",
+              "sentAt": "2026-10-28T10:00:00Z",
+              "type": "text",
+              "text": "抖音测试消息",
+              "mediaUrl": null,
+              "share": null,
+              "callDurationSeconds": null
+            }
+          ]
+        }
+        """.utf8)
+
+        do {
+            let output = try importer.parse(data: douyinData, url: URL(fileURLWithPath: "/tmp/douyin-export.json"))
+            expect(output.format == .douyinArchive, "抖音数据导出识别")
+            expect(output.records.count == 1, "抖音数据导出解析")
+            expect(output.records.first?.platform == .douyin, "抖音数据导出平台")
+            expect(output.records.first?.text == "抖音测试消息", "抖音数据导出内容")
+        } catch {
+            failures.append("抖音数据导出导入：\(error)")
+        }
+
         try? FileManager.default.removeItem(at: scanRoot.deletingLastPathComponent())
         try? FileManager.default.removeItem(at: decryptedRoot)
 
         try? FileManager.default.removeItem(at: repositoryURL)
 
         if failures.isEmpty {
-            print("Domain smoke tests passed: 39/39")
+            print("Domain smoke tests passed: 43/43")
         } else {
             print("Domain smoke tests failed:")
             failures.forEach { print(" - \($0)") }

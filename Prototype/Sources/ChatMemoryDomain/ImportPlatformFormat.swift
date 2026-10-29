@@ -9,6 +9,14 @@ extension ChatPlatform {
         case .wechat: .genericJSON
         }
     }
+
+    var chatLabFallbackPlatform: ChatPlatform {
+        switch self {
+        case .xiaohongshu: .xiaohongshu
+        case .qq: .qq
+        default: .wechat
+        }
+    }
 }
 
 extension RealChatImporter {
