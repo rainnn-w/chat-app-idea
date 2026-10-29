@@ -8,12 +8,12 @@
 
 ### 可行路径
 
-1. 使用你信任的开源工具在本机处理你自己账号的数据，并导出为结构化 `chat.json`。
-2. 在 ChatMemory 中选择：
+1. 使用你信任的开源工具在本机处理你自己账号的数据。
+2. 把结果交给 ChatMemory：
 
-```text
-录入 > 真实记录文件 > chat.json
-```
+   - Mac：选择 `chat.json` / `*.jsonl` / 解密后的微信目录。
+   - Android：使用系统文件选择器选择 JSON/JSONL，或选择解密后的微信目录；绑定一次目录后可以“立即扫描”。
+   - iOS / iPadOS：使用 `fileImporter` 选择导出文件。
 
 当前支持的字段包括：
 
@@ -57,6 +57,17 @@ Msg_<md5(username)> 表：local_id / server_id / local_type / create_time / real
 ```
 
 选择目录时，请选择 `decrypted/` 这一层，而不是单独选择某一个 `.db`。
+
+## 其他平台导出
+
+| 来源 | 推荐参考 | ChatMemory 输入 |
+|---|---|---|
+| 微信 | [LifeArchiveProject/WeChatDataAnalysis](https://github.com/LifeArchiveProject/WeChatDataAnalysis) | 解密后的 `contact/contact.db + message/message_*.db` |
+| QQ | [weq-devs/WeQ](https://github.com/weq-devs/WeQ) | ChatLab JSON / JSONL，或通用 JSON |
+| 小红书 | [kumikosoli/xhs-chatlab-exporter](https://github.com/kumikosoli/xhs-chatlab-exporter) | ChatLab JSON / JSONL |
+| 抖音 | [ZhangYukwiver/DouyinDataReview](https://github.com/ZhangYukwiver/DouyinDataReview) | `chatConversations` + `chatMessages` 的导出 JSON |
+
+ChatMemory 导入时会按 `platformMessageId/server_id` 和签名去重，不会因为重复扫描而无限追加。
 
 > 注意：涉及微信本地密钥、进程内存或绕过签名的方案请自行评估安全、隐私和服务条款风险。ChatMemory 只导入你已经在本机生成/授权的导出结果。
 

@@ -44,6 +44,58 @@ SQLite / FTS 本地索引
 
 iPhone、iPad、Mac 与 Android 分别实现各自的平台适配层，包括文件选择、系统分享入口、OCR、生物识别锁、原帖跳转和权限说明。这样 Apple 端 MVP 可以快速推进，Android 正式启动时不需要重写全部产品逻辑。
 
+## Android 版本
+
+- Jetpack Compose + Material 3 自适应界面
+- 手机底部导航，平板/横屏/大屏自动切换侧边导航栏
+- 时间线 / 标签 / 联系人 / 设置
+- 全局文本搜索、平台筛选、人物筛选、收藏
+- 食物爱好 / Todo / 约定一起做等消息标签
+- 本地 JSON 持久化与导入去重
+- ChatLab JSON / JSONL（QQ、小红书等导出格式）
+- 抖音数据导出 JSON
+- 通用 JSON 数组
+- 解密后的微信 `contact.db + message_*.db` 目录
+- SAF 单文件导入、目录导入、应用内 Inbox、可持久授权的自动扫描目录
+
+构建时安装 Android Studio 或 Android SDK 后，在 `apps/android` 执行：
+
+```bash
+./gradlew :app:assembleDebug
+```
+
+产物位于：
+
+```text
+apps/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Release 构建使用：
+
+```bash
+./gradlew :app:assembleRelease
+```
+
+当前 Android debug 与 release 构建已在本机通过；GitHub Actions 也会构建 debug APK 并上传 artifact。
+
+## 当前完成度
+
+| 平台 | 状态 | 说明 |
+|---|---|---|
+| iPhone / iPad | SwiftUI target 已配置 | `TARGETED_DEVICE_FAMILY=1,2`，手机用 TabView，iPad regular width 用三栏 NavigationSplitView |
+| macOS | SwiftUI target 已完成 | `ChatMemoryMac`、Inbox、Finder/文件导入、DMG 打包脚本可用 |
+| Android | 已通过 debug/release 构建 | 独立 Jetpack Compose 版本，非 Mac Catalyst 套壳 |
+
+本机没有完整 Xcode 时，无法在本机跑 iOS SDK 编译；安装 Xcode 后执行：
+
+```bash
+cd Prototype
+xcodegen generate
+open ChatMemory.xcodeproj
+```
+
+选择 `ChatMemoryiOS`，用 iPhone Simulator 或 iPad Simulator 构建。
+
 ## 设备适配策略
 
 - **iPhone**：主打单手搜索、快速查看和消息标注，使用紧凑布局与底部主导航。
