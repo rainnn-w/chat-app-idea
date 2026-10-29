@@ -50,6 +50,14 @@ swift build --product ChatMemoryDomain
 swift run ChatMemoryPrototypeApp
 ```
 
+## Android 源码
+
+`apps/android` 是独立 Jetpack Compose 版本，已内置 Gradle Wrapper。安装 Android SDK 后，在 `apps/android` 构建：
+
+```bash
+./gradlew :app:assembleDebug
+```
+
 如果要生成 iPhone / iPad / Mac 的正式 App 工程，先安装 [XcodeGen](https://github.com/yonaskolb/XcodeGen)，再执行：
 
 ```bash
