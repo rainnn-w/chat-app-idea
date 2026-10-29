@@ -8,6 +8,7 @@
 当前仓库包含：
 
 - [`docs/PRD.md`](docs/PRD.md)：产品需求文档、MVP 范围、路线图、风险与验证计划。
+- [`docs/USAGE.md`](docs/USAGE.md)：完整使用教程，包括安装、导入、自动扫描、搜索和标签。
 
 ## 核心问题
 
