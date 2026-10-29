@@ -1,6 +1,9 @@
-# 聚合聊天记录产品构想
+# ChatMemory
 
-这是一个面向小情侣、闺蜜和挚友的 Apple 设备优先产品仓库，目标是在用户授权与本地隐私优先的前提下，把微信、QQ、小红书、抖音中同一个人的聊天内容聚合到一个可检索、可标注、可回看的时间线中。
+[![CI](https://github.com/rainnn-w/chat-app-idea/actions/workflows/ci.yml/badge.svg)](https://github.com/rainnn-w/chat-app-idea/actions/workflows/ci.yml)
+[![License: MIT](https://github.com/rainnn-w/chat-app-idea/blob/main/LICENSE)](https://github.com/rainnn-w/chat-app-idea/blob/main/LICENSE)
+
+这是一个开源、本地优先的聊天记忆整理器，面向小情侣、闺蜜和挚友。目标是在用户授权与本地隐私优先的前提下，把微信、QQ、小红书、抖音中同一个人的聊天内容聚合到一个可检索、可标注、可回看的时间线中。
 
 当前仓库包含：
 
@@ -48,3 +51,9 @@ iPhone、iPad、Mac 与 Android 分别实现各自的平台适配层，包括文
 - **Mac**：使用原生 SwiftUI macOS 目标，提供多窗口、侧边栏导航、菜单栏命令、Finder 文件导入、拖拽导入和快捷键。
 
 开发验证顺序：先用 iPad 真机完成 iOS 能力测试，再用 Xcode iPhone Simulator 验证小屏与单手交互，最后接入 macOS 目标验证桌面工作流。
+
+## 开源与隐私
+
+项目代码以 MIT 协议开源。ChatMemory 只处理用户主动导入、分享或选择的数据；不会读取微信进程内存，不会提取微信数据库密钥，也不会上传用户聊天内容。
+
+更多边界说明见 [docs/OPEN_SOURCE.md](docs/OPEN_SOURCE.md) 和 [docs/REAL_IMPORT.md](docs/REAL_IMPORT.md)。

@@ -1,6 +1,8 @@
-# 聊天记忆库 SwiftUI 原型
+# ChatMemory Apple 原型
 
-这个目录先交付一版高优先级 UI 原型：
+[![CI](https://github.com/rainnn-w/chat-app-idea/actions/workflows/ci.yml/badge.svg)](https://github.com/rainnn-w/chat-app-idea/actions/workflows/ci.yml)
+
+这个目录交付高优先级 SwiftUI 原型：
 
 - iPhone：底部标签导航 + 单列时间线 + 详情 Sheet
 - iPad / Mac：三栏 `NavigationSplitView`
@@ -73,4 +75,8 @@ Prototype/dist/ChatMemory-0.8.0-macOS.dmg
 ```
 
 这个包使用 ad-hoc 签名，未做 Apple Notarization。朋友首次打开时，如果 macOS 提示无法验证开发者，需要右键选择“打开”，或在“系统设置 > 隐私与安全性”里点击“仍要打开”。
+
+## 开源协议
+
+代码使用 [MIT License](../LICENSE)。导入数据仍由用户自己负责，请只导入自己账号的数据，或已经获得相关参与者明确同意的数据。
 
