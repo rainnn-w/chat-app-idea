@@ -232,6 +232,7 @@ struct MessageCaptureView: View {
                     supportedFormatRow("抖音", "账号导出 JSON / NDJSON / HTML")
                     supportedFormatRow("QQ / 小红书", "ChatLab JSON / JSONL")
                     supportedFormatRow("抖音", "数据导出 JSON")
+                    supportedFormatRow("微信", "WeChatDataAnalysis messages.json / 导出目录")
                     supportedFormatRow("通用", "messages / data / items / records JSON")
                 }
             }
@@ -731,6 +732,54 @@ final class MessageCaptureModel: ObservableObject {
             do {
                 isProcessing = true
                 errorMessage = nil
+
+                let fileManager = FileManager.default
+                let exportFiles = fileManager.enumerator(
+                    at: url,
+                    includingPropertiesForKeys: [.isRegularFileKey]
+                )?.compactMap { $0 as? URL }
+                    .filter { $0.lastPathComponent == "messages.json" } ?? []
+
+                if !exportFiles.isEmpty {
+                    Task.detached(priority: .userInitiated) { [weak self] in
+                        do {
+                            let importer = RealChatImporter()
+                            var records: [RawImportRecord] = []
+                            var warnings: [String] = []
+
+                            for fileURL in exportFiles.sorted(by: { $0.path < $1.path }) {
+                                let data = try Data(contentsOf: fileURL)
+                                let output = try importer.parse(data: data, url: fileURL)
+                                records.append(contentsOf: output.records)
+                                warnings.append(contentsOf: output.warnings)
+                            }
+
+                            guard !records.isEmpty else {
+                                let reason = warnings.joined(separator: "\n")
+                                throw ImportError(message: reason.isEmpty ? "导出目录中没有可导入消息。" : reason)
+                            }
+
+                            let importedRecords = records
+                            await MainActor.run { [weak self] in
+                                guard let self else { return }
+                                let batch = store.importRealRecords(
+                                    importedRecords,
+                                    fileName: url.lastPathComponent,
+                                    format: .wechatDataAnalysisExport
+                                )
+                                self.importSummary = "✅ WeChatDataAnalysis 导入完成：\(importedRecords.count) 条消息 / 跳过 \(batch?.skippedCount ?? 0) 条重复"
+                                self.isProcessing = false
+                            }
+                        } catch {
+                            await MainActor.run { [weak self] in
+                                self?.errorMessage = "导入失败：\(error.localizedDescription)"
+                                self?.isProcessing = false
+                            }
+                        }
+                    }
+                    return
+                }
+
                 let importer = WechatDecryptedImporter()
                 let directoryImport = try importer.importDirectory(at: url)
 

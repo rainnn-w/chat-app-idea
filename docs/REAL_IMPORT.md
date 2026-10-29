@@ -62,12 +62,57 @@ Msg_<md5(username)> 表：local_id / server_id / local_type / create_time / real
 
 | 来源 | 推荐参考 | ChatMemory 输入 |
 |---|---|---|
-| 微信 | [LifeArchiveProject/WeChatDataAnalysis](https://github.com/LifeArchiveProject/WeChatDataAnalysis) | 解密后的 `contact/contact.db + message/message_*.db` |
+| 微信 | [LifeArchiveProject/WeChatDataAnalysis](https://github.com/LifeArchiveProject/WeChatDataAnalysis) | 解密后的 `contact/contact.db + message/message_*.db`，或 `messages.json` / ZIP / folder 导出 |
 | QQ | [weq-devs/WeQ](https://github.com/weq-devs/WeQ) | ChatLab JSON / JSONL，或通用 JSON |
 | 小红书 | [kumikosoli/xhs-chatlab-exporter](https://github.com/kumikosoli/xhs-chatlab-exporter) | ChatLab JSON / JSONL |
 | 抖音 | [ZhangYukwiver/DouyinDataReview](https://github.com/ZhangYukwiver/DouyinDataReview) | `chatConversations` + `chatMessages` 的导出 JSON |
 
 ChatMemory 导入时会按 `platformMessageId/server_id` 和签名去重，不会因为重复扫描而无限追加。
+
+## WeChatDataAnalysis Connector
+
+ChatMemory 支持解析 WeChatDataAnalysis 聊天导出中的 `messages.json`：
+
+```json
+{
+  "schemaVersion": 1,
+  "account": "wxid_example",
+  "conversation": {
+    "username": "peer_example",
+    "displayName": "示例联系人",
+    "isGroup": false
+  },
+  "messages": [
+    {
+      "serverId": "server-1001",
+      "localId": 1,
+      "createTime": 1792173600,
+      "renderType": "text",
+      "isSent": false,
+      "senderUsername": "peer_example",
+      "senderDisplayName": "示例联系人",
+      "content": "不要香菜"
+    }
+  ]
+}
+```
+
+导入规则：
+
+| WeChatDataAnalysis 字段 | ChatMemory 字段 |
+|---|---|
+| `conversation.username` | 去重命名空间 |
+| `conversation.displayName` | 原帖 / 会话标题兜底 |
+| `isSent` | 发送方向 |
+| `senderUsername` / `senderDisplayName` | 发送者信息 |
+| `createTime` | 统一时间线 |
+| `renderType` | 图片 / 语音 / 视频 / 链接等占位 |
+| `content` / `title` / `url` | 全文搜索与原帖跳转 |
+| `serverId` 或 `localId` | 稳定去重标识 |
+
+在 Apple 端选择 WeChatDataAnalysis 的导出根目录时，ChatMemory 会递归查找所有 `messages.json`。Android 端可选择单个 `messages.json`、包含该文件的 ZIP，或包含这些文件的目录。
+
+ChatMemory 不调用 WeChatDataAnalysis 的密钥获取、进程扫描或数据库解密接口。
 
 > 注意：涉及微信本地密钥、进程内存或绕过签名的方案请自行评估安全、隐私和服务条款风险。ChatMemory 只导入你已经在本机生成/授权的导出结果。
 

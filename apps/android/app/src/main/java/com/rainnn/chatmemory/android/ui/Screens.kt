@@ -580,7 +580,7 @@ fun SettingsScreen(repository: ChatRepository, state: ChatState) {
         SectionCard {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("导入", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
-                Text("先绑定一个人，再导入同一人的其他平台记录。支持 ChatLab JSON/JSONL、抖音导出 JSON、通用 JSON 和解密后的微信 SQLite。")
+                Text("先绑定一个人，再导入同一人的其他平台记录。支持 WeChatDataAnalysis messages.json/ZIP、ChatLab JSON/JSONL、抖音导出 JSON、通用 JSON 和解密后的微信 SQLite。")
                 OutlinedButton(
                     onClick = {
                         filePicker.launch(arrayOf("*/*"))

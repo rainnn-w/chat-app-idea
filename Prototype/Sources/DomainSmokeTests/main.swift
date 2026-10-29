@@ -489,13 +489,69 @@ enum DomainSmokeTests {
             failures.append("抖音数据导出导入：\(error)")
         }
 
+        let weChatDataAnalysisData = Data("""
+        {
+          "schemaVersion": 1,
+          "exportedAt": "2026-10-28T10:00:00Z",
+          "account": "wxid_example",
+          "conversation": {
+            "username": "peer_wx",
+            "displayName": "微信示例",
+            "isGroup": false
+          },
+          "messages": [
+            {
+              "id": "db:Msg_peer:1",
+              "localId": 1,
+              "serverId": "server-wda-001",
+              "createTime": 1800000000,
+              "renderType": "text",
+              "isSent": false,
+              "senderUsername": "peer_wx",
+              "senderDisplayName": "微信示例",
+              "content": "WeChatDataAnalysis 测试消息"
+            },
+            {
+              "id": "db:Msg_peer:2",
+              "localId": 2,
+              "serverId": "server-wda-002",
+              "createTime": 1800000060,
+              "renderType": "link",
+              "isSent": true,
+              "senderUsername": "self_wx",
+              "senderDisplayName": "我",
+              "content": "京都路线",
+              "title": "京都咖啡地图",
+              "url": "https://example.com/kyoto"
+            }
+          ]
+        }
+        """.utf8)
+
+        do {
+            let output = try importer.parse(
+                data: weChatDataAnalysisData,
+                url: URL(fileURLWithPath: "/tmp/messages.json")
+            )
+            expect(output.format == .wechatDataAnalysisExport, "WeChatDataAnalysis 识别")
+            expect(output.records.count == 2, "WeChatDataAnalysis 解析")
+            expect(output.records.first?.platform == .wechat, "WeChatDataAnalysis 平台")
+            expect(output.records.first?.sender == .peer, "WeChatDataAnalysis 对方消息")
+            expect(output.records.first?.text == "WeChatDataAnalysis 测试消息", "WeChatDataAnalysis 内容")
+            expect(output.records.last?.sender == .me, "WeChatDataAnalysis 我方消息")
+            expect(output.records.last?.externalTitle == "京都咖啡地图", "WeChatDataAnalysis 标题")
+            expect(output.records.last?.externalURL == "https://example.com/kyoto", "WeChatDataAnalysis 链接")
+        } catch {
+            failures.append("WeChatDataAnalysis 导入：\(error)")
+        }
+
         try? FileManager.default.removeItem(at: scanRoot.deletingLastPathComponent())
         try? FileManager.default.removeItem(at: decryptedRoot)
 
         try? FileManager.default.removeItem(at: repositoryURL)
 
         if failures.isEmpty {
-            print("Domain smoke tests passed: 43/43")
+            print("Domain smoke tests passed: 50/50")
         } else {
             print("Domain smoke tests failed:")
             failures.forEach { print(" - \($0)") }

@@ -53,6 +53,7 @@ iPhone、iPad、Mac 与 Android 分别实现各自的平台适配层，包括文
 - 食物爱好 / Todo / 约定一起做等消息标签
 - 本地 JSON 持久化与导入去重
 - ChatLab JSON / JSONL（QQ、小红书等导出格式）
+- WeChatDataAnalysis `messages.json` / ZIP / 导出目录
 - 抖音数据导出 JSON
 - 通用 JSON 数组
 - 解密后的微信 `contact.db + message_*.db` 目录
@@ -77,6 +78,32 @@ Release 构建使用：
 ```
 
 当前 Android debug 与 release 构建已在本机通过；GitHub Actions 也会构建 debug APK 并上传 artifact。
+
+### WeChatDataAnalysis 集成
+
+ChatMemory 不内置微信进程扫描、数据库密钥提取或 SQLCipher 解密。推荐流程是：
+
+```text
+WeChatDataAnalysis 负责用户本机数据的解密 / 导出
+        ↓
+输出 messages.json / ZIP / folder 增量导出
+        ↓
+ChatMemory 只解析这些导出产物
+        ↓
+绑定联系人、合并时间线、搜索、打标签
+```
+
+支持的 WeChatDataAnalysis 导出结构：
+
+```text
+export/
+  xxx/
+    meta.json
+    messages.json
+    media/
+```
+
+单聊和群聊消息都会保留 `serverId/localId` 作为去重标识；重复扫描同一导出目录不会重复入库。
 
 ## 当前完成度
 

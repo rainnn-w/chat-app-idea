@@ -2,6 +2,8 @@ package com.rainnn.chatmemory.android.data
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
+import java.util.zip.ZipInputStream
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 
@@ -33,6 +35,26 @@ object AutoChatParsers {
         } else {
             parseObject(JSONObject(trimmed), fileName)
         }
+    }
+
+    fun parseZip(data: ByteArray, archiveName: String): ParsedArchive {
+        var lastError: Throwable? = null
+        ZipInputStream(ByteArrayInputStream(data)).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                val name = entry.name.substringAfterLast('/')
+                if (name.equals("messages.json", ignoreCase = true)) {
+                    try {
+                        val text = zip.readBytes().toString(Charsets.UTF_8)
+                        return parse(text, "$archiveName/$entry.name")
+                    } catch (error: Throwable) {
+                        lastError = error
+                    }
+                }
+                zip.closeEntry()
+            }
+        }
+        throw lastError ?: error("ZIP 中没有找到 WeChatDataAnalysis messages.json")
     }
 
     private fun parseJsonL(text: String, fileName: String): ParsedArchive {
@@ -73,6 +95,10 @@ object AutoChatParsers {
     private fun parseObject(root: JSONObject, fileName: String): ParsedArchive {
         root.optJSONArray("chatMessages")?.let { return parseDouyin(root, it, fileName) }
 
+        if (isWeChatDataAnalysisExport(root)) {
+            return parseWeChatDataAnalysis(root, fileName)
+        }
+
         val messages = root.optJSONArray("messages")
             ?: root.optJSONArray("chatMessages")
             ?: error("JSON 中没有 messages 数组")
@@ -95,6 +121,81 @@ object AutoChatParsers {
         }
         if (parsed.isEmpty()) error("JSON 中没有有效消息")
         return ParsedArchive(platform, parsed)
+    }
+
+    private fun isWeChatDataAnalysisExport(root: JSONObject): Boolean {
+        val conversation = root.optJSONObject("conversation") ?: return false
+        val messages = root.optJSONArray("messages") ?: return false
+        if (messages.length() == 0) return false
+        val first = messages.optJSONObject(0) ?: return false
+        return first.has("renderType") && first.has("senderUsername") &&
+            (first.has("createTime") || first.has("create_time")) &&
+            (root.has("account") || conversation.has("username"))
+    }
+
+    private fun parseWeChatDataAnalysis(root: JSONObject, fileName: String): ParsedArchive {
+        val account = root.optString("account")
+        val conversation = root.optJSONObject("conversation") ?: JSONObject()
+        val conversationID = conversation.optString("username", conversation.optString("conversationUsername"))
+        val conversationName = conversation.optString("displayName", conversation.optString("name"))
+        val isGroup = conversation.optBoolean("isGroup")
+        val messages = root.optJSONArray("messages") ?: JSONArray()
+
+        val parsed = messages.mapObjects { item ->
+            val timestamp = readTimestamp(item)
+            if (timestamp <= 0L) return@mapObjects null
+
+            val renderedType = item.optString("renderType")
+            val content = item.optString("content")
+            val messageTitle = item.optString("title", item.optString("quoteTitle", item.optString("description")))
+            val text = cleanRichText(content).ifBlank {
+                cleanRichText(messageTitle).ifBlank { placeholder(renderedType) }
+            }
+
+            val senderName = item.optString("senderDisplayName", item.optString("senderUsername"))
+            val sender = when {
+                renderedType.equals("system", ignoreCase = true) -> MessageSender.SYSTEM
+                item.optBoolean("isSent") -> MessageSender.ME
+                senderName.contains("系统") -> MessageSender.SYSTEM
+                else -> MessageSender.PEER
+            }
+
+            val messageID = firstNonEmpty(item, "serverId", "server_id", "id", "localId", "local_id")
+                ?: "${timestamp}:${text.hashCode()}"
+            val url = firstNonEmpty(item, "url", "imageUrl", "videoUrl", "emojiUrl")
+                ?: Regex("https?://[^\\s]+").find(text)?.value
+
+            ParsedMessage(
+                sourceIdentifier = "wechat-data-analysis:$account:$conversationID:$messageID",
+                sender = sender,
+                timestampMillis = timestamp,
+                text = text,
+                title = messageTitle.ifBlank { conversationName.ifBlank { null } },
+                url = url?.takeIf { it.isNotBlank() }
+            )
+        }
+
+        if (parsed.isEmpty()) error("WeChatDataAnalysis messages.json 中没有有效消息")
+        return ParsedArchive(
+            platform = ChatPlatform.WECHAT,
+            messages = parsed
+        )
+    }
+
+    private fun placeholder(renderType: String): String = when (renderType.lowercase()) {
+        "image" -> "[图片]"
+        "emoji" -> "[表情]"
+        "video" -> "[视频]"
+        "voice" -> "[语音]"
+        "chatHistory" -> "[聊天记录]"
+        "file" -> "[文件]"
+        "link" -> "[链接]"
+        "transfer" -> "[转账]"
+        "redPacket" -> "[红包]"
+        "location" -> "[位置]"
+        "quote" -> "[引用消息]"
+        "voip" -> "[通话]"
+        else -> "[消息]"
     }
 
     private fun parseDouyin(root: JSONObject, messages: JSONArray, fileName: String): ParsedArchive {
@@ -183,6 +284,11 @@ object AutoChatParsers {
         val createSeconds = item.optLong("create_time", Long.MIN_VALUE)
         if (createSeconds != Long.MIN_VALUE) {
             return if (createSeconds > 10_000_000_000L) createSeconds else createSeconds * 1000L
+        }
+
+        val createTime = item.optLong("createTime", Long.MIN_VALUE)
+        if (createTime != Long.MIN_VALUE) {
+            return if (createTime > 10_000_000_000L) createTime else createTime * 1000L
         }
 
         return 0L

@@ -11,6 +11,7 @@ public enum ImportFormat: String, Codable, Hashable, CaseIterable {
     case wechatExportJSON
     case chatLab
     case douyinArchive
+    case wechatDataAnalysisExport
 
     public var title: String {
         switch self {
@@ -23,6 +24,7 @@ public enum ImportFormat: String, Codable, Hashable, CaseIterable {
         case .wechatExportJSON: "微信导出 JSON"
         case .chatLab: "ChatLab 聊天归档"
         case .douyinArchive: "抖音数据导出"
+        case .wechatDataAnalysisExport: "WeChatDataAnalysis 导出"
         }
     }
 
@@ -46,6 +48,8 @@ public enum ImportFormat: String, Codable, Hashable, CaseIterable {
             "选择 ChatLab v0.0.2 的 JSON/JSONL，可用于 QQ（WeQ）、小红书等导出结果。"
         case .douyinArchive:
             "选择抖音数据导出的 JSON，需包含 chatMessages / chatConversations。"
+        case .wechatDataAnalysisExport:
+            "选择 WeChatDataAnalysis 导出的 messages.json，或包含多个 messages.json 的导出目录。"
         }
     }
 }
@@ -186,6 +190,9 @@ public struct RealChatImporter {
             if sample.contains("\"server_id\"") && sample.contains("\"type_name\"") {
                 return .wechatExportJSON
             }
+            if sample.contains("\"conversation\"") && sample.contains("\"senderusername\"") && sample.contains("\"rendertype\"") {
+                return .wechatDataAnalysisExport
+            }
             if sample.contains("xiaohongshu") || sample.contains("小红书") || sample.contains("note") {
                 return .xiaohongshuExport
             }
@@ -227,6 +234,8 @@ public struct RealChatImporter {
             )
         case .chatLab:
             return try parseChatLab(data: data, url: url)
+        case .wechatDataAnalysisExport:
+            return try parseWeChatDataAnalysisExport(data: data, url: url)
         case .douyinArchive:
             return try parseJSON(
                 data: data,
@@ -398,6 +407,93 @@ private extension RealChatImporter {
             text.lowercased(),
             sender.rawValue
         ].joined(separator: "|")
+    }
+
+    func parseWeChatDataAnalysisExport(data: Data, url: URL) throws -> ImportOutput {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let messageValues = root["messages"] as? [[String: Any]] else {
+            throw ImportError(message: "这不是 WeChatDataAnalysis 的 messages.json：缺少 conversation/messages 结构。")
+        }
+
+        let conversation = root["conversation"] as? [String: Any] ?? [:]
+        let account = stringValue(in: root, keys: ["account"])
+        let conversationID = stringValue(in: conversation, keys: ["username", "conversationUsername"])
+        let conversationName = stringValue(in: conversation, keys: ["displayName", "name"])
+        let isGroup = (conversation["isGroup"] as? Bool) ?? false
+
+        let records = messageValues.compactMap { message -> RawImportRecord? in
+            let content = stringValue(in: message, keys: ["content"])
+            let title = stringValue(in: message, keys: ["title", "quoteTitle", "description"])
+            let renderedType = stringValue(in: message, keys: ["renderType"]).lowercased()
+            var text = cleanMessageText(content)
+            if text.isEmpty { text = cleanMessageText(title) }
+            if text.isEmpty { text = placeholder(for: renderedType) }
+            guard !text.isEmpty else { return nil }
+
+            let timestamp = dateValue(in: message, keys: ["createTime", "create_time", "timestamp"]) ?? .distantPast
+            let isSent = (message["isSent"] as? Bool) ?? false
+            let senderName = stringValue(in: message, keys: ["senderDisplayName", "senderUsername"])
+            let sender: MessageSender
+            if renderedType == "system" {
+                sender = .system
+            } else if isSent {
+                sender = .me
+            } else {
+                sender = senderName.contains("系统") ? .system : .peer
+            }
+
+            let externalURL = firstHTTPURL(
+                stringValue(in: message, keys: ["url", "imageUrl", "videoUrl", "emojiUrl"])
+            ) ?? firstHTTPURL(text)
+            let externalTitle = title.nilIfEmpty ?? conversationName.nilIfEmpty
+
+            let messageID = stringValue(
+                in: message,
+                keys: ["serverId", "server_id", "id", "localId", "local_id"]
+            )
+            let sourceID = messageID.isEmpty
+                ? recordStableKey(platform: .wechat, sender: sender, date: timestamp, text: text)
+                : messageID
+
+            return RawImportRecord(
+                platform: .wechat,
+                sender: sender,
+                sentAt: timestamp,
+                text: text,
+                externalTitle: externalTitle,
+                externalURL: externalURL?.absoluteString,
+                sourceIdentifier: "wechat-data-analysis:\(account):\(conversationID):\(sourceID)",
+                confidence: isGroup ? 0.96 : 0.98
+            )
+        }
+
+        guard !records.isEmpty else {
+            throw ImportError(message: "WeChatDataAnalysis messages.json 中没有可导入的消息。")
+        }
+
+        return ImportOutput(
+            records: records.sorted { $0.sentAt < $1.sentAt },
+            format: .wechatDataAnalysisExport,
+            warnings: isGroup ? ["群聊发送者使用导出器解析结果；缺 displayName 时显示为对方。"] : []
+        )
+    }
+
+    func placeholder(for renderType: String) -> String {
+        switch renderType {
+        case "image": "[图片]"
+        case "emoji": "[表情]"
+        case "video": "[视频]"
+        case "voice": "[语音]"
+        case "chatHistory": "[聊天记录]"
+        case "file": "[文件]"
+        case "link": "[链接]"
+        case "transfer": "[转账]"
+        case "redPacket": "[红包]"
+        case "location": "[位置]"
+        case "quote": "[引用消息]"
+        case "voip": "[通话]"
+        default: "[消息]"
+        }
     }
 
     func parseSQLite(data: Data, url: URL, platform: ChatPlatform) throws -> ImportOutput {

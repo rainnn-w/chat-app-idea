@@ -145,6 +145,13 @@ class ChatRepository(
                             temp.delete()
                         }
                     }
+                    name.endsWith(".zip", ignoreCase = true) -> {
+                        val bytes = context.contentResolver.openInputStream(uri)
+                            ?.use { it.readBytes() }
+                            ?: error("无法读取所选 ZIP")
+                        val parsed = AutoChatParsers.parseZip(bytes, name)
+                        importParsed(parsed, target)
+                    }
                     else -> {
                         val text = context.contentResolver.openInputStream(uri)
                             ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
@@ -190,10 +197,13 @@ class ChatRepository(
                 }.onFailure { if (it.message != "没有找到可导入的微信数据库") warnings += it.message.orEmpty() }
 
                 temporary.walkTopDown()
-                    .filter { it.isFile && it.extension.lowercase() in listOf("json", "jsonl") }
+                    .filter { it.isFile && it.extension.lowercase() in listOf("json", "jsonl", "zip") }
                     .forEach { file ->
                         runCatching {
-                            val parsed = AutoChatParsers.parse(file.readText(), file.name)
+                            val parsed = when (file.extension.lowercase()) {
+                                "zip" -> AutoChatParsers.parseZip(file.readBytes(), file.name)
+                                else -> AutoChatParsers.parse(file.readText(), file.name)
+                            }
                             total += importParsed(parsed, target)
                         }.onFailure { warnings += "${file.name}: ${it.message.orEmpty()}" }
                     }
@@ -230,6 +240,10 @@ class ChatRepository(
                         target
                     )
                     "db" -> mergeMessages(WechatDirectoryImporter().importSingleDatabase(file, target))
+                    "zip" -> importParsed(
+                        AutoChatParsers.parseZip(file.readBytes(), file.name),
+                        target
+                    )
                     else -> error("暂不支持该扩展名")
                 }
                 imported += count
@@ -432,7 +446,7 @@ class ChatRepository(
             if (item.isDirectory) {
                 val child = File(destination, name).apply { mkdirs() }
                 copySupportedFiles(item, child)
-            } else if (item.isFile && name.substringAfterLast('.', "").lowercase() in listOf("db", "json", "jsonl")) {
+            } else if (item.isFile && name.substringAfterLast('.', "").lowercase() in listOf("db", "json", "jsonl", "zip")) {
                 copyUriToCache(item.uri, name, destination)
             }
         }
